@@ -1,0 +1,11 @@
+/__pycache__
+/checkpoints
+/dataset
+/history
+/log
+/loss_csv
+/loss_results
+/results
+/sptt_new.zip
+/test_demo
+/test_results
