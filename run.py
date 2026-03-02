@@ -96,6 +96,9 @@ if __name__  == "__main__":
 
     # anomaly_detection task
     parser.add_argument('--anomaly_ratio', type=float, default=1, help='anomaly ratio')
+    parser.add_argument('--record', action='store_true', help='record the trajectories of singular values')
+    parser.add_argument('--inverse_model', type=str, default="stable", help='stable inverse or normal inverse')
+    parser.add_argument('--viz_batch_level', action='store_true', help='viz all batch')
     
     args = parser.parse_args()
     
@@ -107,10 +110,7 @@ if __name__  == "__main__":
     torch.manual_seed(fix_seed)
     
     global_param['trials'] = args.trials
-    global_param['dropout_x'] = args.dropout_x
-    global_param['dropout_d'] = args.dropout_d
-    global_param['hutchinson_size'] = args.hutchinson_size
-    global_param['random_size'] = args.random_size
+    global_param['viz_batch_level'] = args.viz_batch_level
     
     if torch.cuda.is_available() and args.use_gpu:
         args.device = torch.device('cuda:{}'.format(args.gpu))
@@ -147,7 +147,7 @@ if __name__  == "__main__":
     if args.is_training:
         for ii in range(args.itr):
             exp = Exp(args)
-            setting = '{0}_{1}_{2}_{3}_sd_{4}_ft{5}_sl{6}_ll{7}_pl{8}_Hut{9}_Rand{10}_Drop{11}{12}_{13}_{14}_{15}'.format(
+            setting = '{0}_{1}_{2}_{3}_sd_{4}_ft{5}_sl{6}_ll{7}_pl{8}_{9}_{10}_{11}'.format(
                 args.task_name,
                 args.model_id,
                 args.model,
@@ -157,10 +157,6 @@ if __name__  == "__main__":
                 args.seq_len,
                 args.label_len,
                 args.pred_len,
-                args.hutchinson_size,
-                args.random_size,
-                args.dropout_x,
-                args.dropout_d,
                 # args.d_ff, 全连接层的维度
                 args.embed,
                 args.des, ii)
@@ -178,7 +174,7 @@ if __name__  == "__main__":
         # 这个地方用于加载已经训练好的模型参数
         exp = Exp(args)  # set experiments
         ii = 0
-        setting = '{0}_{1}_{2}_{3}_sd_{4}_ft{5}_sl{6}_ll{7}_pl{8}_Hut{9}_Rand{10}_Drop{11}{12}_{13}_{14}_{15}'.format(
+        setting = '{0}_{1}_{2}_{3}_sd_{4}_ft{5}_sl{6}_ll{7}_pl{8}_{9}_{10}_{11}'.format(
             args.task_name,
             args.model_id,
             args.model,
@@ -188,10 +184,6 @@ if __name__  == "__main__":
             args.seq_len,
             args.label_len,
             args.pred_len,
-            args.hutchinson_size,
-            args.random_size,
-            args.dropout_x,
-            args.dropout_d,
             # args.d_ff, 全连接层的维度
             args.embed,
             args.des, ii)
