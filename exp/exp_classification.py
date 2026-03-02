@@ -24,60 +24,32 @@ if not os.path.exists(log_root):
     os.makedirs(log_root)
 
 def setup_logger(model_name, dataset_name, seed, learning_rate, krank, time_block, 
-                    batch_size, seq_len, pred_len, lradj, hutchinson_size, 
-                    random_size, trials, dropout_x, dropout_d, estimation_method, features, task_name, patience, epoch):
+                    batch_size, seq_len, pred_len, features, task_name, patience, epoch, inverse_model):
     log_project = os.path.join(log_root, f"{task_name}", f"{model_name}")
     if not os.path.exists(log_project):
         os.makedirs(log_project)
         
-    log_dir = os.path.join(log_project, f'{dataset_name}', f'seed_{seed}', f'Pa_Ep:{patience}_{epoch}')
+    log_dir = os.path.join(log_project, f'{dataset_name}', inverse_model, f'seed_{seed}', f'Pa_Ep:{patience}_{epoch}')
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     
     # 创建logger
     logger = logging.getLogger("classification")
     logger.setLevel(logging.INFO)
-    
     # 清除之前的处理器，防止重复
     if logger.handlers:
         logger.handlers.clear()
     
-    
     # 创建文件处理器，并将日志文件保存到指定目录下
     timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
-    if estimation_method == 'Hut':
-        file_handler = logging.FileHandler(
-            os.path.join(
-                log_dir, 
-                f"{features}_{estimation_method}_{hutchinson_size}_{learning_rate}_{batch_size}_{seq_len}_{pred_len}_{krank}_{time_block}_{timestamp}.log"
-            ),
-            mode='a'
-        )
-    elif estimation_method == 'Random':
-        file_handler = logging.FileHandler(
-            os.path.join(
-                log_dir, 
-                f"{features}_{estimation_method}_{random_size}_{learning_rate}_{batch_size}_{seq_len}_{pred_len}_{krank}_{time_block}_{timestamp}.log"
-            ),
-            mode='a'
-        )
-    elif estimation_method == 'Dropout':
-        file_handler = logging.FileHandler(
-            os.path.join(
-                log_dir, 
-                f"{features}_{estimation_method}_{dropout_x}_{dropout_d}_{trials}_{learning_rate}_{batch_size}_{seq_len}_{pred_len}_{krank}_{time_block}_{timestamp}.log"
-            ),
-            mode='a'
-        )
-    elif estimation_method == 'None':
-        file_handler = logging.FileHandler(
-            os.path.join(
-                log_dir, 
-                f"{features}_{estimation_method}_{learning_rate}_{batch_size}_{seq_len}_{pred_len}_{krank}_{time_block}_{timestamp}.log"
-            ),
-            mode='a'
-        )
-        
+    file_handler = logging.FileHandler(
+        os.path.join(
+            log_dir, 
+            f"{features}_{learning_rate}_{batch_size}_{seq_len}_{pred_len}_{krank}_{time_block}_{timestamp}.log"
+        ),
+        mode='a'
+    )
+       
     file_handler.setLevel(logging.INFO)
     
     formatter = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
@@ -138,20 +110,14 @@ class Exp_Classification(Exp_Basic):
             self.args.batch_size,
             self.args.seq_len,
             self.args.pred_len,
-            self.args.lradj,
-            self.args.hutchinson_size,
-            self.args.random_size,
-            self.args.trials,
-            self.args.dropout_x,
-            self.args.dropout_d,
-            self.args.estimation_method,
             self.args.features,
             self.args.task_name,
             self.args.patience,
-            self.args.train_epochs
+            self.args.train_epochs,
+            self.args.inverse_model,
         )
 
-        path = os.path.join(self.args.checkpoints, self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), setting)
+        path = os.path.join(self.args.checkpoints, self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), self.args.inverse_model, setting)
         if not os.path.exists(path):
             os.makedirs(path)
 
@@ -178,7 +144,7 @@ class Exp_Classification(Exp_Basic):
         
         timestamp_loss_csv = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())  
         train_loss_csv_dir = os.path.join(project_root, "loss_csv", self.args.task_name, self.args.model, 
-                                      self.args.data_name, str(self.args.seed), 'train')
+                                      self.args.data_name, str(self.args.seed), self.args.inverse_model, 'train')
         train_loss_csv_file = os.path.join(train_loss_csv_dir, f"train_loss_{timestamp_loss_csv}.csv")
 
         os.makedirs(train_loss_csv_dir, exist_ok=True)
@@ -304,18 +270,18 @@ class Exp_Classification(Exp_Basic):
             avg_time_epoch += avg_time
             
             # if self.args.data_name == 'SelfRegulationSCP1' or self.args.data_name == 'FaceDetection':
-            if self.args.data_name == 'SelfRegulationSCP1':
-            # early_stopping(vali_loss, self.model, path)
-                early_stopping(-val_accuracy, self.model, path)
-            else:
-                # HACK
-                early_stopping(vali_loss, self.model, path)
+            # if self.args.data_name == 'SelfRegulationSCP1':
+            # # early_stopping(vali_loss, self.model, path)
+            #     early_stopping(-val_accuracy, self.model, path)
+            # else:
+            #     # HACK
+            early_stopping(vali_loss, self.model, path)
                 # early_stopping(-val_accuracy, self.model, path)
             # early_stopping(-val_accuracy, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
                 timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())   
-                folder_path_loss = os.path.join('./loss_results', self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), 'train', str(timestamp))
+                folder_path_loss = os.path.join('./loss_results', self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), self.args.inverse_model, 'train', str(timestamp))
                 if not os.path.exists(folder_path_loss):
                     os.makedirs(folder_path_loss)
                 
@@ -327,7 +293,7 @@ class Exp_Classification(Exp_Basic):
                     for loss in train_loss_per_iter:
                         writer.writerow([loss])
                 
-                folder_path_loss = os.path.join('./loss_results', self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), 'vali', str(timestamp))
+                folder_path_loss = os.path.join('./loss_results', self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), self.args.inverse_model, 'vali', str(timestamp))
                 if not os.path.exists(folder_path_loss):
                     os.makedirs(folder_path_loss)
                 
@@ -356,7 +322,7 @@ class Exp_Classification(Exp_Basic):
         self.model.eval()
         
         vali_loss_csv_dir = os.path.join(project_root, "loss_csv", self.args.task_name, self.args.model, self.args.data_name, 
-                                     str(self.args.seed), 'vali')
+                                     str(self.args.seed), self.args.inverse_model, 'vali')
         vali_loss_csv_file = os.path.join(vali_loss_csv_dir, f"vali_loss_{timestamp_loss_csv}.csv")
         os.makedirs(vali_loss_csv_dir, exist_ok=True)
         
@@ -411,18 +377,18 @@ class Exp_Classification(Exp_Basic):
             # self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
             # 对历史版本的时间序列预测的加载需要修改下路径
             # load_path = os.path.join('./checkpoints/', long_term_forecast, setting)
-            load_path = os.path.join(self.args.checkpoints, self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), setting)
+            load_path = os.path.join(self.args.checkpoints, self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), self.args.inverse_model, setting)
             self.model.load_state_dict(torch.load(os.path.join(load_path, 'checkpoint.pth')))
 
         preds = []
         trues = []
         # folder_path = './test_results/' + setting + '/'
         
-        timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())    
-        folder_path = os.path.join('./test_results', self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), str(timestamp))        
+        # timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())    
+        # folder_path = os.path.join('./test_results', self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), str(timestamp))        
         
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
+        # if not os.path.exists(folder_path):
+        #     os.makedirs(folder_path)
 
         self.model.eval()
         with torch.no_grad():
