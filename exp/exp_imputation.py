@@ -29,9 +29,8 @@ if not os.path.exists(log_root):
     os.makedirs(log_root)
 
 def setup_logger(model_name, dataset_name, seed, learning_rate, krank, time_block, 
-                    batch_size, seq_len, pred_len, lradj, hutchinson_size, 
-                    random_size, trials, dropout_x, dropout_d, estimation_method, features, task_name, mask_rate,
-                    patience, epoch):
+                    batch_size, seq_len, pred_len, features, task_name, mask_rate,
+                    patience, epoch, inverse_model):
     log_project = os.path.join(log_root, f"{task_name}", f"{model_name}")
     if not os.path.exists(log_project):
         os.makedirs(log_project)
@@ -51,22 +50,13 @@ def setup_logger(model_name, dataset_name, seed, learning_rate, krank, time_bloc
     
     # 创建文件处理器，并将日志文件保存到指定目录下
     timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
-    if estimation_method == 'Hut':
-        file_handler = logging.FileHandler(
-            os.path.join(
-                log_dir, 
-                f"{features}_{estimation_method}_{hutchinson_size}_{learning_rate}_{batch_size}_{seq_len}_{pred_len}_{krank}_{time_block}_{timestamp}.log"
-            ),
-            mode='a'
-        )
-    elif estimation_method == 'None':
-        file_handler = logging.FileHandler(
-            os.path.join(
-                log_dir, 
-                f"{features}_{estimation_method}_{learning_rate}_{batch_size}_{seq_len}_{pred_len}_{krank}_{time_block}_{timestamp}.log"
-            ),
-            mode='a'
-        )
+    file_handler = logging.FileHandler(
+        os.path.join(
+            log_dir, 
+            f"{features}_{learning_rate}_{batch_size}_{seq_len}_{pred_len}_{krank}_{time_block}_{timestamp}.log"
+        ),
+        mode='a'
+    )
         
     file_handler.setLevel(logging.INFO)
     
@@ -122,21 +112,15 @@ class Exp_Imputation(Exp_Basic):
             self.args.batch_size,
             self.args.seq_len,
             self.args.pred_len,
-            self.args.lradj,
-            self.args.hutchinson_size,
-            self.args.random_size,
-            self.args.trials,
-            self.args.dropout_x,
-            self.args.dropout_d,
-            self.args.estimation_method,
             self.args.features,
             self.args.task_name,
             self.args.mask_rate,
             self.args.patience,
-            self.args.train_epochs
+            self.args.train_epochs,
+            self.args.inverse_model,
         )
         
-        path = os.path.join(self.args.checkpoints, self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), str(self.args.mask_rate), setting)
+        path = os.path.join(self.args.checkpoints, self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), self.args.inverse_model, str(self.args.mask_rate), setting)
         if not os.path.exists(path):
             os.makedirs(path)
 
@@ -163,7 +147,7 @@ class Exp_Imputation(Exp_Basic):
         
         timestamp_loss_csv = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())  
         train_loss_csv_dir = os.path.join(project_root, "loss_csv", self.args.task_name, self.args.model, self.args.data_name, 
-                                      str(self.args.mask_rate), str(self.args.seed), 'train')
+                                      str(self.args.mask_rate), str(self.args.seed), self.args.inverse_model, 'train')
         train_loss_csv_file = os. path.join(train_loss_csv_dir, f"train_loss_{timestamp_loss_csv}.csv")
         os.makedirs(train_loss_csv_dir, exist_ok=True)
         
@@ -289,7 +273,7 @@ class Exp_Imputation(Exp_Basic):
             if early_stopping.early_stop:
                 print("Early stopping")
                 timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())   
-                folder_path_loss = os.path.join('./loss_results', self.args.task_name, self.args.model, self.args.data_name, str(self.args.mask_rate), str(self.args.seed), 'train', str(timestamp))
+                folder_path_loss = os.path.join('./loss_results', self.args.task_name, self.args.model, self.args.data_name, str(self.args.mask_rate), str(self.args.seed), self.args.inverse_model, 'train', str(timestamp))
                 if not os.path.exists(folder_path_loss):
                     os.makedirs(folder_path_loss)
                 
@@ -301,7 +285,7 @@ class Exp_Imputation(Exp_Basic):
                     for loss in train_loss_per_iter:
                         writer.writerow([loss])
                 
-                folder_path_loss = os.path.join('./loss_results', self.args.task_name, self.args.model, self.args.data_name, str(self.args.mask_rate), str(self.args.seed), 'vali', str(timestamp))
+                folder_path_loss = os.path.join('./loss_results', self.args.task_name, self.args.model, self.args.data_name, str(self.args.mask_rate), str(self.args.seed), self.args.inverse_model, 'vali', str(timestamp))
                 if not os.path.exists(folder_path_loss):
                     os.makedirs(folder_path_loss)
                 
@@ -387,7 +371,7 @@ class Exp_Imputation(Exp_Basic):
         if test:
             print('loading model')
             # path = os.path.join(self.args.checkpoints, self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), setting)
-            load_path = os.path.join(self.args.checkpoints, self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), setting)
+            load_path = os.path.join(self.args.checkpoints, self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), self.args.inverse_model,setting)
             self.model.load_state_dict(torch.load(os.path.join(load_path, 'checkpoint.pth')))
 
         preds = []
@@ -395,7 +379,7 @@ class Exp_Imputation(Exp_Basic):
         masks = []
         timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())    
         folder_path = os.path.join('./test_results', self.args.task_name, self.args.model, self.args.data_name, 
-                                   str(self.args.seed), str(self.args.mask_rate), str(timestamp))
+                                   str(self.args.seed), str(self.args.mask_rate), self.args.inverse_model, str(timestamp))
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
@@ -442,9 +426,9 @@ class Exp_Imputation(Exp_Basic):
         print('test shape:', preds.shape, trues.shape)
 
         # result save
-        folder_path = os.path.join('./results/', self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), str(self.args.mask_rate), str(timestamp))
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
+        # folder_path = os.path.join('./results/', self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), str(self.args.mask_rate), str(timestamp))
+        # if not os.path.exists(folder_path):
+        #     os.makedirs(folder_path)
 
 
         mae, mse, rmse, mape, mspe = metric(preds[masks == 0], trues[masks == 0])
@@ -458,7 +442,7 @@ class Exp_Imputation(Exp_Basic):
         
         logger.info(f"Test | mse:{mse:.4f}  mae:{mae:.4f}  rmse:{rmse:.4f}  mape:{mape:.4f}  mspe:{mspe:.4f}")
 
-        np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
-        np.save(folder_path + 'pred.npy', preds)
-        np.save(folder_path + 'true.npy', trues)
+        # np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
+        # np.save(folder_path + 'pred.npy', preds)
+        # np.save(folder_path + 'true.npy', trues)
         return
