@@ -3,9 +3,12 @@
 export CUDA_VISIBLE_DEVICES=0
 
 model_name=BpttLSTM
-seed=$2
 data_name=$1
+seed=$2
 echo "$seed, $data_name"
+time_block_num=$3
+learning_rate=$4
+inverse_model=$5
 train_epochs=300
 patience=25
 root_path=./dataset/"$data_name"/
@@ -63,8 +66,8 @@ elif [[ "$data_name" == "JapaneseVowels" ]]; then
   num_classes=9
   seq_len=29
 elif [[ "$data_name" == "PEMS-SF" ]]; then
-  train_epochs=300
-  patience=30
+  train_epochs=800
+  patience=100
   batch_size=16
   feature_dim=963
   num_classes=7
@@ -97,13 +100,13 @@ python -u run.py \
   --data_name "$data_name" \
   --root_path "$root_path" \
   --krank 10 \
-  --time_block_num 4 \
+  --time_block_num $time_block_num \
   --feature_dim "$feature_dim" \
   --itr 1 \
   --train_epochs "$train_epochs" \
   --batch_size "$batch_size" \
   --patience "$patience" \
-  --learning_rate 0.0001 \
+  --learning_rate $learning_rate \
   --lradj type3 \
   --tmax 10 \
   --use_gpu True \
@@ -112,5 +115,6 @@ python -u run.py \
   --hidden_dim 512 \
   --estimation_method None \
   --num_class "$num_classes" \
-  --des 'Exp' 
+  --des 'Exp' \
+  --inverse_model $inverse_model
 

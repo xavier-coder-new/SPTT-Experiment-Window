@@ -3,8 +3,12 @@
 export CUDA_VISIBLE_DEVICES=0
 
 model_name=SpttGRU
-seed=$2
 data_name=$1
+seed=$2
+time_block_num=$3
+krank=$4
+learning_rate=$5
+inverse_model=$6
 train_epochs=300
 patience=25
 root_path=./dataset/"$data_name"/
@@ -55,8 +59,10 @@ elif [[ "$data_name" == "Heartbeat" ]]; then
   num_classes=2
   seq_len=405
 elif [[ "$data_name" == "JapaneseVowels" ]]; then
-  train_epochs=600
-  patience=30
+  train_epochs=800
+  patience=100
+  # train_epochs=2000
+  # patience=500
   batch_size=16
   feature_dim=12
   num_classes=9
@@ -93,14 +99,14 @@ python -u run.py \
   --data UEA \
   --data_name "$data_name" \
   --root_path "$root_path" \
-  --krank 10 \
-  --time_block_num 4 \
+  --krank $krank \
+  --time_block_num $time_block_num \
   --feature_dim "$feature_dim" \
   --itr 1 \
   --train_epochs "$train_epochs" \
   --batch_size "$batch_size" \
   --patience "$patience" \
-  --learning_rate 0.0001 \
+  --learning_rate $learning_rate \
   --lradj type3 \
   --tmax 10 \
   --use_gpu True \
@@ -109,5 +115,6 @@ python -u run.py \
   --hidden_dim 512 \
   --estimation_method None \
   --num_class "$num_classes" \
-  --des 'Exp' 
+  --des 'Exp'\
+  --inverse_model $inverse_model
 
