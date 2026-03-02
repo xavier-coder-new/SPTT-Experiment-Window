@@ -1,7 +1,7 @@
 import os
 import torch
 from models.Bptt import BpttLSTM, BpttGRU
-from models.Sptt import SpttGRU, SpttLSTM, SpttGRU_T, SpttLSTM_T
+from models.Sptt import SpttGRU_Window, SpttLSTM_Window
 
 class Exp_Basic(object):
     def __init__(self, args):
@@ -9,10 +9,8 @@ class Exp_Basic(object):
         self.model_dict = {
             'BpttLSTM': BpttLSTM,
             'BpttGRU': BpttGRU,
-            'SpttLSTM': SpttLSTM,
-            'SpttGRU': SpttGRU,
-            'SpttLSTM_T': SpttLSTM_T,
-            'SpttGRU_T': SpttGRU_T
+            'SpttLSTM': SpttLSTM_Window,
+            'SpttGRU': SpttGRU_Window,
         }
 
         self.device = self._acquire_device()
