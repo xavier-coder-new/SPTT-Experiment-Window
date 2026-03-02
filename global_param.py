@@ -14,5 +14,8 @@ global_param = {
     'hutchinson_size': 0,
     # 用于随机采样估计
     'random_size': 0,
-    'chunk_index': 0
+    'chunk_index': 0,
+    'mid_epoch': 5,
+    'last_epoch': 6,
+    'viz_batch_level': False,
 }
