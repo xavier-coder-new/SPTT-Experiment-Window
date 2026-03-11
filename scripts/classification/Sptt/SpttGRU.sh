@@ -60,7 +60,7 @@ elif [[ "$data_name" == "Heartbeat" ]]; then
   seq_len=405
 elif [[ "$data_name" == "JapaneseVowels" ]]; then
   train_epochs=800
-  patience=100
+  patience=130
   # train_epochs=2000
   # patience=500
   batch_size=16

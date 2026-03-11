@@ -68,14 +68,14 @@ elif [[ "$data_name" == "JapaneseVowels" ]]; then
   train_epochs=800
   # 倒数第二个跑
   # train_epochs=300
-  patience=100
+  patience=130
   batch_size=16
   feature_dim=12
   num_classes=9
   seq_len=29
 elif [[ "$data_name" == "PEMS-SF" ]]; then
-  train_epochs=800
-  patience=100
+  train_epochs=1000
+  patience=200
   batch_size=16
   feature_dim=963
   num_classes=7
