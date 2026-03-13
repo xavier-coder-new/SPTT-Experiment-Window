@@ -14,6 +14,8 @@ import torch.optim.lr_scheduler as lr_scheduler
 from global_param import global_param
 import csv
 import pandas as pd
+from icecream import ic
+from utils.visualization_spectrum_drift import plot_spectrum_drift
 
 warnings.filterwarnings('ignore')
 
@@ -99,6 +101,9 @@ class Exp_Classification(Exp_Basic):
         vali_data, vali_loader = self._get_data(flag='TEST')
         # test_data, test_loader = self._get_data(flag='TEST')
         
+        timestamp_loss_csv = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
+        self.timestamp_loss_csv = timestamp_loss_csv
+        
         global logger
         logger = setup_logger(
             self.args.model,
@@ -139,15 +144,23 @@ class Exp_Classification(Exp_Basic):
         max_time_epoch = 0.0
         avg_time_epoch = 0.0
         epoch_count = 0
-        train_loss_per_iter = []
-        vali_loss_per_iter = []
         
-        timestamp_loss_csv = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())  
-        train_loss_csv_dir = os.path.join(project_root, "loss_csv", self.args.task_name, self.args.model, 
-                                      self.args.data_name, str(self.args.seed), self.args.inverse_model, 'train')
+        train_loss_csv_dir = os.path.join('./loss_results', self.args.task_name, self.args.model, self.args.data_name, 
+                                        str(self.args.seed), self.args.inverse_model, 'train',
+                                        f"Patience_{self.args.patience}_Epoch_{self.args.train_epochs}", 
+                                        f"Time_block_{self.args.time_block_num}_Krank_{self.args.krank}", 
+                                        str(timestamp_loss_csv))
         train_loss_csv_file = os.path.join(train_loss_csv_dir, f"train_loss_{timestamp_loss_csv}.csv")
-
         os.makedirs(train_loss_csv_dir, exist_ok=True)
+        
+        vali_loss_csv_dir = os.path.join('./loss_results', self.args.task_name, self.args.model, self.args.data_name, 
+                                         str(self.args.seed), self.args.inverse_model, 'vali',
+                                        f"Patience_{self.args.patience}_Epoch_{self.args.train_epochs}", 
+                                        f"Time_block_{self.args.time_block_num}_Krank_{self.args.krank}", 
+                                        str(timestamp_loss_csv))
+        vali_loss_csv_file = os.path.join(vali_loss_csv_dir, f"vali_loss_{timestamp_loss_csv}.csv")
+        
+        os.makedirs(vali_loss_csv_dir,exist_ok=True)
         
         for epoch in range(0, self.args.train_epochs):
             epoch_count += 1
@@ -183,8 +196,7 @@ class Exp_Classification(Exp_Basic):
                 
                 # loss = criterion(outputs, label.long().squeeze(-1))
                 train_loss.append(avg_loss)
-                # HACK
-                train_loss_per_iter.append(avg_loss)
+                # train_loss_per_iter.append(avg_loss)
                 
                 preds_train.append(outputs.detach())
                 trues_train.append(label)
@@ -201,6 +213,21 @@ class Exp_Classification(Exp_Basic):
                     time_now = time.time()
 
                 loss.backward()
+                
+                if self.args.viz_spectrum_drift and self.args.model in {'BpttLSTM', 'BpttGRU'}:
+                    grad_w_hh = None
+                    for name, param in self.model.named_parameters():
+                        if 'w_hh' in name and param.grad is not None:
+                            grad_w_hh = param.grad.detach().float()
+                            break
+                    assert grad_w_hh is not None, "grad_w_hh is None"
+                    if grad_w_hh is not None:    
+                        if 'sigma_list' not in global_param:
+                            ic("model name: ", self.args.model, "allow to record spectrum drift")
+                            global_param['sigma_list'] = []
+                        _, Sigma, _ = torch.linalg.svd(grad_w_hh, full_matrices=False)
+                        truncated_sigma = Sigma[:self.args.krank]
+                        global_param['sigma_list'].append(truncated_sigma.cpu().numpy())
                 
                 time_for_batch = global_param['time_for_batch']
                 if time_for_batch > max_time_batch:
@@ -239,13 +266,13 @@ class Exp_Classification(Exp_Basic):
             
             accuracy_train = cal_accuracy(predictions_train, trues_train)
             
-            vali_loss, val_accuracy, vali_loss_total = self.vali(vali_data, vali_loader, criterion, timestamp_loss_csv)
+            vali_loss, val_accuracy = self.vali(vali_data, vali_loader, criterion, vali_loss_csv_file)
             # test_loss, test_accuracy = self.vali(test_data, test_loader, criterion)
-            vali_loss_per_iter.extend(vali_loss_total)
+            # vali_loss_per_iter.extend(vali_loss_total)
             
-            print(
-                "Epoch: {0}, Steps: {1} | Train Loss: {2:.3f} Vali Loss: {3:.3f} Vali Acc: {4:.3f}"
-                .format(epoch + 1, train_steps, train_loss, vali_loss, val_accuracy))
+            # print(
+            #     "Epoch: {0}, Steps: {1} | Train Loss: {2:.3f} Vali Loss: {3:.3f} Vali Acc: {4:.3f}"
+            #     .format(epoch + 1, train_steps, train_loss, vali_loss, val_accuracy))
             
             if self.args.lradj == 'type1':
                 adjust_learning_rate(model_optim, epoch + 1, self.args)
@@ -280,30 +307,22 @@ class Exp_Classification(Exp_Basic):
             # early_stopping(-val_accuracy, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
-                timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())   
-                folder_path_loss = os.path.join('./loss_results', self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), self.args.inverse_model, 'train', str(timestamp))
-                if not os.path.exists(folder_path_loss):
-                    os.makedirs(folder_path_loss)
+                train_loss_df = pd.read_csv(train_loss_csv_file)
+                visual_loss(train_loss_df['train_loss'].tolist(), 'Train Loss', os.path.join(train_loss_csv_dir, 'train_loss.svg'))
                 
-                visual_loss(train_loss_per_iter, 'Train Loss', os.path.join(folder_path_loss, 'train_loss.pdf'))
+                vali_loss_df = pd.read_csv(vali_loss_csv_file)
+                visual_loss(vali_loss_df['vali_loss'].tolist(), 'Validation Loss', os.path.join(vali_loss_csv_dir, 'vali_loss.svg'))
                 
-                with open(os.path.join(folder_path_loss, 'train_loss.csv'), 'w', newline='') as f:
-                    writer = csv.writer(f)
-                    writer.writerow(['Train Loss'])  # 可选：写个列名
-                    for loss in train_loss_per_iter:
-                        writer.writerow([loss])
-                
-                folder_path_loss = os.path.join('./loss_results', self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), self.args.inverse_model, 'vali', str(timestamp))
-                if not os.path.exists(folder_path_loss):
-                    os.makedirs(folder_path_loss)
-                
-                visual_loss(vali_loss_per_iter, 'Vali Loss', os.path.join(folder_path_loss, 'vali_loss.pdf'))
-                
-                with open(os.path.join(folder_path_loss, 'vali_loss.csv'), 'w', newline='') as f:
-                    writer = csv.writer(f)
-                    writer.writerow(['Vali Loss'])  # 可选：写个列名
-                    for loss in vali_loss_per_iter:
-                        writer.writerow([loss])
+                if self.args.viz_spectrum_drift:
+                    ic("visualize spectrum drift")
+                    viz_spectrum_drift_path = os.path.join('./viz_spectrum_drift', self.args.task_name, self.args.model, 
+                                                           self.args.data_name, self.args.inverse_model, str(self.args.seed), 
+                                                           f"Patience_{self.args.patience}_Epoch_{self.args.train_epochs}", 
+                                                           f"Time_block_{self.args.time_block_num}_Krank_{self.args.krank}", 
+                                                           str(timestamp_loss_csv))
+                    if not os.path.exists(viz_spectrum_drift_path):
+                        os.makedirs(viz_spectrum_drift_path)
+                    plot_spectrum_drift(viz_spectrum_drift_path, global_param['sigma_list'], train_steps, self.args.patience, self.args.model)
                 
                 avg_time_epoch /= epoch_count
                 logger.info(f"Early stopping Epoch: {epoch + 1} Steps: {train_steps} Average_time_epoch {avg_time_epoch:.5f} Min_time_epoch: {min_time_epoch:.5f} Max_time_epoch: {max_time_epoch:.5f}")
@@ -315,16 +334,11 @@ class Exp_Classification(Exp_Basic):
 
         return self.model
 
-    def vali(self, vali_data, vali_loader, criterion, timestamp_loss_csv):
+    def vali(self, vali_data, vali_loader, criterion, vali_loss_csv_file):
         total_loss = []
         preds = []
         trues = []
         self.model.eval()
-        
-        vali_loss_csv_dir = os.path.join(project_root, "loss_csv", self.args.task_name, self.args.model, self.args.data_name, 
-                                     str(self.args.seed), self.args.inverse_model, 'vali')
-        vali_loss_csv_file = os.path.join(vali_loss_csv_dir, f"vali_loss_{timestamp_loss_csv}.csv")
-        os.makedirs(vali_loss_csv_dir, exist_ok=True)
         
         with torch.no_grad():
             for i, (batch_x, label, padding_mask) in enumerate(vali_loader):
@@ -353,7 +367,7 @@ class Exp_Classification(Exp_Basic):
         else:
             vali_loss_data.to_csv(vali_loss_csv_file, mode='w', header=True, index=False)
         
-        total_loss_avg = np.average(total_loss)
+        total_loss = np.average(total_loss)
 
         # preds和trues是两个列表，分别存储多个batch的结果
         # torch.cat(preds, 0)沿着batch维度拼接，将所有batch的结果连接起来，得到完整的预测值和真实标签。
@@ -368,7 +382,7 @@ class Exp_Classification(Exp_Basic):
         accuracy = cal_accuracy(predictions, trues)
 
         self.model.train()
-        return total_loss_avg, accuracy, total_loss
+        return total_loss, accuracy
 
     def test(self, setting, test=0):
         test_data, test_loader = self._get_data(flag='TEST')
