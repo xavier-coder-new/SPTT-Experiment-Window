@@ -6,6 +6,7 @@ import math
 from global_param import global_param
 import time
 import numpy as np
+from icecream import ic
 
 # class Model(nn.Module):
 #     def __init__(self, input_size, hidden_size, output_size, num_layers=None):
@@ -191,6 +192,17 @@ class CustomLSTM(nn.Module):
                 if not is_last_chunk:
                     model_optim.zero_grad()
                     loss.backward()
+                    
+                    if self.config.viz_spectrum_drift:
+                        grad_w_hh = self.w_hh.grad.clone().detach()
+                        assert grad_w_hh is not None, "grad_w_hh is None"
+                        if "sigma_list" not in global_param:
+                            ic("model name: ", self.config.model, "allow to record spectrum drift")
+                            global_param["sigma_list"] = []
+                        _, Sigma, _ = torch.linalg.svd(grad_w_hh, full_matrices=False)
+                        truncated_sigma = Sigma[:self.config.krank]
+                        global_param["sigma_list"].append(truncated_sigma.cpu().numpy())
+                        
                     model_optim.step()
             
             # 如果是最后一个last_chunk, 直接返回loss, 在主程序反向传播，更新梯度和权重
