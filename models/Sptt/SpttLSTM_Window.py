@@ -498,6 +498,11 @@ class LSTMCellFunction(torch.autograd.Function):
             
             global_param['time_for_batch'] += time_backward
             
+            if global_param['viz_spectrum_drift']:
+                if 'sigma_list' not in global_param:
+                    global_param['sigma_list'] = []
+                global_param['sigma_list'].append(Sigma_hh.detach().cpu().numpy())
+            
             accumulator.save_sbtpca_parameter(X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih, 
                                               X_matrix_hh, Sigma_hh, Sigma_matrix_hh, Delta_matrix_hh)
             
