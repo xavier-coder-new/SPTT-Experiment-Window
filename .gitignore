@@ -23,5 +23,12 @@
 /sptt_new.zip
 /sptt_new_backup.zip
 /TSPTT-NMI.zip
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+/viz_spectrum_drift
+/exp/__pychache__
 
 
