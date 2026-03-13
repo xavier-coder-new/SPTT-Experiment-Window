@@ -99,6 +99,9 @@ if __name__  == "__main__":
     parser.add_argument('--record', action='store_true', help='record the trajectories of singular values')
     parser.add_argument('--inverse_model', type=str, default="stable", help='stable inverse or normal inverse')
     parser.add_argument('--viz_batch_level', action='store_true', help='viz all batch')
+    parser.add_argument('--viz_spectrum_drift', action='store_true', help='visualize spectrum drift')
+    parser.add_argument('--viz_energy_rentention', action='store_true', help='visualize energy retention')
+    
     
     args = parser.parse_args()
     
@@ -111,6 +114,8 @@ if __name__  == "__main__":
     
     global_param['trials'] = args.trials
     global_param['viz_batch_level'] = args.viz_batch_level
+    global_param['viz_spectrum_drift'] = args.viz_spectrum_drift
+    global_param['viz_energy_rentention'] = args.viz_energy_rentention
     
     if torch.cuda.is_available() and args.use_gpu:
         args.device = torch.device('cuda:{}'.format(args.gpu))
