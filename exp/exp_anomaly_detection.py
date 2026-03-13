@@ -18,6 +18,8 @@ import logging
 import torch.optim.lr_scheduler as lr_scheduler
 from global_param import global_param
 import pandas as pd
+from utils.visualization_spectrum_drift import plot_spectrum_drift
+from icecream import ic
 
 warnings.filterwarnings('ignore')
 
@@ -98,6 +100,9 @@ class Exp_Anomaly_Detection(Exp_Basic):
     def train(self, setting):
         train_data, train_loader = self._get_data(flag='train')
         vali_data, vali_loader = self._get_data(flag='val')
+        
+        timestamp_loss_csv = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
+        self.timestamp_loss_csv = timestamp_loss_csv
 
         global logger
         logger = setup_logger(
@@ -140,15 +145,23 @@ class Exp_Anomaly_Detection(Exp_Basic):
         max_time_epoch = 0.0
         avg_time_epoch = 0.0
         epoch_count = 0
-        train_loss_per_iter = []
-        vali_loss_per_iter = []
         
-        timestamp_loss_csv = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())  
-        train_loss_csv_dir = os.path.join(project_root, "loss_csv", self.args.task_name, self.args.model, self.args.data_name, 
-                                      str(self.args.anomaly_ratio), str(self.args.seed), self.args.inverse_model, 'train')
+        train_loss_csv_dir = os.path.join('./loss_results', self.args.task_name, self.args.model, self.args.data_name, 
+                                        str(self.args.seed), self.args.inverse_model, 'train',
+                                        f"Patience_{self.args.patience}_Epoch_{self.args.train_epochs}", 
+                                        f"Time_block_{self.args.time_block_num}_Krank_{self.args.krank}", 
+                                        str(timestamp_loss_csv))
         train_loss_csv_file = os.path.join(train_loss_csv_dir, f"train_loss_{timestamp_loss_csv}.csv")
-
-        os.makedirs(train_loss_csv_dir,exist_ok=True)
+        os.makedirs(train_loss_csv_dir, exist_ok=True)
+        
+        vali_loss_csv_dir = os.path.join('./loss_results', self.args.task_name, self.args.model, self.args.data_name, 
+                                         str(self.args.seed), self.args.inverse_model, 'vali',
+                                        f"Patience_{self.args.patience}_Epoch_{self.args.train_epochs}", 
+                                        f"Time_block_{self.args.time_block_num}_Krank_{self.args.krank}", 
+                                        str(timestamp_loss_csv))
+        vali_loss_csv_file = os.path.join(vali_loss_csv_dir, f"vali_loss_{timestamp_loss_csv}.csv")
+        
+        os.makedirs(vali_loss_csv_dir,exist_ok=True)
         
         for epoch in range(self.args.train_epochs):
             epoch_count += 1
@@ -191,6 +204,21 @@ class Exp_Anomaly_Detection(Exp_Basic):
 
                 loss.backward()
                 
+                if self.args.viz_spectrum_drift and self.args.model in {'BpttLSTM', 'BpttGRU'}:
+                    grad_w_hh = None
+                    for name, param in self.model.named_parameters():
+                        if 'w_hh' in name and param.grad is not None:
+                            grad_w_hh = param.grad.detach().float()
+                            break
+                    assert grad_w_hh is not None, "grad_w_hh is None"
+                    if grad_w_hh is not None:    
+                        if 'sigma_list' not in global_param:
+                            ic("model name: ", self.args.model, "allow to record spectrum drift")
+                            global_param['sigma_list'] = []
+                        _, Sigma, _ = torch.linalg.svd(grad_w_hh, full_matrices=False)
+                        truncated_sigma = Sigma[:self.args.krank]
+                        global_param['sigma_list'].append(truncated_sigma.cpu().numpy())
+                
                 time_for_batch = global_param['time_for_batch']
                 if time_for_batch > max_time_batch:
                     max_time_batch = time_for_batch
@@ -221,9 +249,9 @@ class Exp_Anomaly_Detection(Exp_Basic):
             train_loss = np.average(train_loss)
             
             # 此处是存均值
-            train_loss_per_iter.append(train_loss)
-            vali_loss = self.vali(vali_data, vali_loader, criterion, timestamp_loss_csv)
-            vali_loss_per_iter.append(vali_loss)
+            # train_loss_per_iter.append(train_loss)
+            vali_loss = self.vali(vali_data, vali_loader, criterion, vali_loss_csv_file)
+            # vali_loss_per_iter.append(vali_loss)
 
             # print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
             #     epoch + 1, train_steps, train_loss, vali_loss, test_loss))
@@ -254,34 +282,24 @@ class Exp_Anomaly_Detection(Exp_Basic):
             
             if early_stopping.early_stop:
                 print("Early stopping")
-                timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())   
-                folder_path_loss = os.path.join('./loss_results', self.args.task_name, self.args.model, self.args.data_name, str(self.args.anomaly_ratio), str(self.args.seed), self.args.inverse_model, 'train', str(timestamp))
-                if not os.path.exists(folder_path_loss):
-                    os.makedirs(folder_path_loss)
+                train_loss_df = pd.read_csv(train_loss_csv_file)
+                visual_loss(train_loss_df['train_loss'].tolist(), 'Train Loss', os.path.join(train_loss_csv_dir, 'train_loss.svg'))
                 
-                visual_loss(train_loss_per_iter, 'Train Loss', os.path.join(folder_path_loss, 'train_loss.pdf'))
+                vali_loss_df = pd.read_csv(vali_loss_csv_file)
+                visual_loss(vali_loss_df['vali_loss'].tolist(), 'Validation Loss', os.path.join(vali_loss_csv_dir, 'vali_loss.svg'))
                 
-                with open(os.path.join(folder_path_loss, 'train_loss.csv'), 'w', newline='') as f:
-                    writer = csv.writer(f)
-                    writer.writerow(['Train Loss'])  # 可选：写个列名
-                    for loss in train_loss_per_iter:
-                        writer.writerow([loss])
-                
-                folder_path_loss = os.path.join('./loss_results', self.args.task_name, self.args.model, self.args.data_name, str(self.args.anomaly_ratio), str(self.args.seed), self.args.inverse_model, 'vali', str(timestamp))
-                if not os.path.exists(folder_path_loss):
-                    os.makedirs(folder_path_loss)
-                
-                visual_loss(vali_loss_per_iter, 'Vali Loss', os.path.join(folder_path_loss, 'vali_loss.pdf'))
-                
-                with open(os.path.join(folder_path_loss, 'vali_loss.csv'), 'w', newline='') as f:
-                    writer = csv.writer(f)
-                    writer.writerow(['Vali Loss'])  # 可选：写个列名
-                    for loss in vali_loss_per_iter:
-                        writer.writerow([loss])
+                if self.args.viz_spectrum_drift:
+                    ic("visualize spectrum drift")
+                    viz_spectrum_drift_path = os.path.join('./viz_spectrum_drift', self.args.task_name, self.args.model, 
+                                                           self.args.data_name, self.args.inverse_model, str(self.args.seed), 
+                                                           f"Patience_{self.args.patience}_Epoch_{self.args.train_epochs}", 
+                                                           f"Time_block_{self.args.time_block_num}_Krank_{self.args.krank}", 
+                                                           str(timestamp_loss_csv))
+                    if not os.path.exists(viz_spectrum_drift_path):
+                        os.makedirs(viz_spectrum_drift_path)
+                    plot_spectrum_drift(viz_spectrum_drift_path, global_param['sigma_list'], train_steps, self.args.patience, self.args.model)
                 
                 avg_time_epoch /= epoch_count
-                train_loss_per_iter = []
-                vali_loss_per_iter = []
                 logger.info(f"Early stopping Epoch: {epoch + 1} Steps: {train_steps} Average_time_epoch {avg_time_epoch:.5f} Min_time_epoch: {min_time_epoch:.5f} Max_time_epoch: {max_time_epoch:.5f}")
                 break
 
@@ -291,15 +309,9 @@ class Exp_Anomaly_Detection(Exp_Basic):
         return self.model
 
 
-    def vali(self, vali_data, vali_loader, criterion, timestamp_loss_csv):
+    def vali(self, vali_data, vali_loader, criterion, vali_loss_csv_file):
         total_loss = []
         self.model.eval()
-        
-        vali_loss_csv_dir = os.path.join(project_root, "loss_csv", self.args.task_name, self.args.model, 
-                                     self.args.data_name, str(self.args.anomaly_ratio), str(self.args.seed), self.args.inverse_model, 'vali')
-        vali_loss_csv_file = os.path.join(vali_loss_csv_dir, f"vali_loss_{timestamp_loss_csv}.csv")
-        
-        os.makedirs(vali_loss_csv_dir,exist_ok=True)
         
         with torch.no_grad():
             for i, (batch_x, _) in enumerate(vali_loader):
@@ -329,9 +341,9 @@ class Exp_Anomaly_Detection(Exp_Basic):
         else:
             vali_loss_data.to_csv(vali_loss_csv_file, mode='w', header=True, index=False)
         
-        total_loss_avg = np.average(total_loss)
+        total_loss = np.average(total_loss)
         self.model.train()
-        return total_loss_avg
+        return total_loss
 
     def test(self, setting, test=0):
         # 在异常检测任务中，train_loader在测试阶段使用，是为了统计正常样本的分布特征，用来估计“异常能量阈值”
@@ -339,7 +351,11 @@ class Exp_Anomaly_Detection(Exp_Basic):
         train_data, train_loader = self._get_data(flag='train')
         if test:
             print('loading model')
-            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+            # 构建与训练时一致的模型路径
+            model_path = os.path.join(self.args.checkpoints, self.args.task_name, self.args.model, 
+                                     self.args.data_name, str(self.args.seed), str(self.args.anomaly_ratio), 
+                                     self.args.inverse_model, setting, 'checkpoint.pth')
+            self.model.load_state_dict(torch.load(model_path))
 
         attens_energy = []
 
