@@ -28,5 +28,7 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+/viz_spectrum_drift
+/exp/__pychache__
 
 
