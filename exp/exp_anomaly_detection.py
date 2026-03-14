@@ -334,12 +334,16 @@ class Exp_Anomaly_Detection(Exp_Basic):
         return total_loss_avg
 
     def test(self, setting, test=0):
-        # 在异常检测任务中，train_loader在测试阶段使用，是为了统计正常样本的分布特征，用来估计“异常能量阈值”
+        # 在异常检测任务中，train_loader 在测试阶段使用，是为了统计正常样本的分布特征，用来估计"异常能量阈值"
         test_data, test_loader = self._get_data(flag='test')
         train_data, train_loader = self._get_data(flag='train')
         if test:
             print('loading model')
-            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+            # 构建与训练时一致的模型路径
+            model_path = os.path.join(self.args.checkpoints, self.args.task_name, self.args.model, 
+                                     self.args.data_name, str(self.args.seed), str(self.args.anomaly_ratio), 
+                                     self.args.inverse_model, setting, 'checkpoint.pth')
+            self.model.load_state_dict(torch.load(model_path))
 
         attens_energy = []
 

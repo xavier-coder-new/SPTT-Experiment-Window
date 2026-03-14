@@ -167,7 +167,9 @@ class Exp_Short_Term_Forecast(Exp_Basic):
 
         if test:
             print('loading model')
-            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+            # 构建与训练时一致的模型路径
+            model_path = os.path.join(self.args.checkpoints, setting, 'checkpoint.pth')
+            self.model.load_state_dict(torch.load(model_path))
 
         folder_path = './test_results/' + setting + '/'
         if not os.path.exists(folder_path):
