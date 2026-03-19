@@ -370,7 +370,7 @@ class CustomGRU(nn.Module):
         self.reset_parameters()
         self.init_stitt_parameters()
         
-        accumulator.save_sbtpca_parameter(self.X_matrix_ih, self.Sigma_ih, self.Sigma_matrix_ih, self.Delta_matrix_ih, 
+        accumulator.save_sptt_parameter(self.X_matrix_ih, self.Sigma_ih, self.Sigma_matrix_ih, self.Delta_matrix_ih, 
                                           self.X_matrix_hh, self.Sigma_hh, self.Sigma_matrix_hh, self.Delta_matrix_hh)
         
     def reset_parameters(self):
@@ -634,7 +634,7 @@ class GRUCellFunction(torch.autograd.Function):
         d_reset_gate = d_n_tanh * hidden_w_hn
         d_reset_gate = d_reset_gate * reset_gate * (1 - reset_gate)
         
-        # 保存sbtpca所用的参数
+        # 保存sptt所用的参数
         delta = torch.cat((d_reset_gate, d_update_gate, d_n_tanh), 1)
         # CustomPrint.custom_print()
         accumulator.accumulate(input, hidden_state, delta)
@@ -675,7 +675,7 @@ class GRUCellFunction(torch.autograd.Function):
             global_param['flag'] = False
             
             # 取stitt所需参数
-            X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih, X_matrix_hh, Sigma_hh, Sigma_matrix_hh, Delta_matrix_hh = accumulator.deliver_sbtpca_parameter()
+            X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih, X_matrix_hh, Sigma_hh, Sigma_matrix_hh, Delta_matrix_hh = accumulator.deliver_sptt_parameter()
             activation_input, activation_hx, delta = accumulator.get_concatenated_gradients()
             
             t = len(activation_input)
@@ -757,7 +757,7 @@ class GRUCellFunction(torch.autograd.Function):
             X_matrix_hh_new, Sigma_hh_new, Sigma_matrix_hh_new, Delta_matrix_hh_new = init_stitt_parameters(X_matrix_ih, Sigma_ih, Delta_matrix_ih, X_matrix_hh, Sigma_hh, Delta_matrix_hh)
             
             
-            accumulator.save_sbtpca_parameter(X_matrix_ih_new, Sigma_ih_new, Sigma_matrix_ih_new, Delta_matrix_ih_new, 
+            accumulator.save_sptt_parameter(X_matrix_ih_new, Sigma_ih_new, Sigma_matrix_ih_new, Delta_matrix_ih_new, 
                                               X_matrix_hh_new, Sigma_hh_new, Sigma_matrix_hh_new, Delta_matrix_hh_new)
 
         
