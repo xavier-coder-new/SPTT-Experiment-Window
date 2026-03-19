@@ -10,7 +10,7 @@ class Exp_Basic(object):
             'BpttLSTM': BpttLSTM,
             'BpttGRU': BpttGRU,
             'SpttLSTM': SpttLSTM_Window,
-            'SpttGRU': SpttGRU_Window,
+            'SpttGRUNew': SpttGRU_Window,
         }
 
         self.device = self._acquire_device()

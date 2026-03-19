@@ -5,7 +5,7 @@ import torch.nn as nn
 import math
 from global_param import global_param
 import time
-from utils.GradientAccumulator import GradientAccumulator
+from utils.GradientAccumulator_Hybrid_GRU import GradientAccumulator
 import numpy as np
 
 accumulator = GradientAccumulator()
@@ -144,7 +144,7 @@ class CustomGRU(nn.Module):
         self.reset_parameters()
         self.init_stitt_parameters()
         
-        accumulator.save_sbtpca_parameter(self.X_matrix_ih, self.Sigma_ih, self.Sigma_matrix_ih, self.Delta_matrix_ih, 
+        accumulator.save_sptt_parameter(self.X_matrix_ih, self.Sigma_ih, self.Sigma_matrix_ih, self.Delta_matrix_ih, 
                                           self.X_matrix_hh, self.Sigma_hh, self.Sigma_matrix_hh, self.Delta_matrix_hh)
         
     def reset_parameters(self):
@@ -323,7 +323,7 @@ class CustomGRU(nn.Module):
             hx = torch.zeros(num_samples, self.hidden_dim).to(self.device)
 
             
-            time_step = 1
+            time_step = 0
             for i in range(x.size(1)):
                 time_step += 1
                 inputs = x[:, i, :]
@@ -408,10 +408,11 @@ class GRUCellFunction(torch.autograd.Function):
         d_reset_gate = d_n_tanh * hidden_w_hn
         d_reset_gate = d_reset_gate * reset_gate * (1 - reset_gate)
         
-        # 保存sbtpca所用的参数
-        delta = torch.cat((d_reset_gate, d_update_gate, d_n_tanh), 1)
+        # 保存sptt所用的参数
+        delta_ih = torch.cat((d_reset_gate, d_update_gate, d_n_tanh), 1)
+        delta_hh = torch.cat((d_reset_gate, d_update_gate, d_n_tanh * reset_gate), 1)
         # CustomPrint.custom_print()
-        accumulator.accumulate(input, hidden_state, delta)
+        accumulator.accumulate(input, hidden_state, delta_ih, delta_hh)
             
         # 计算输入和隐藏状态的梯度
         # 计算输入的梯度
@@ -449,8 +450,8 @@ class GRUCellFunction(torch.autograd.Function):
             global_param['flag'] = False
             
             # 取stitt所需参数
-            X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih, X_matrix_hh, Sigma_hh, Sigma_matrix_hh, Delta_matrix_hh = accumulator.deliver_sbtpca_parameter()
-            activation_input, activation_hx, delta = accumulator.get_concatenated_gradients()
+            X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih, X_matrix_hh, Sigma_hh, Sigma_matrix_hh, Delta_matrix_hh = accumulator.deliver_sptt_parameter()
+            activation_input, activation_hx, delta_ih_cat, delta_hh_cat = accumulator.get_concatenated_gradients()
             
             t = len(activation_input)
             i = chunk_block
@@ -461,10 +462,10 @@ class GRUCellFunction(torch.autograd.Function):
             
             start_calculate_gradients = time.time()
             with torch.no_grad():
-                scale_factor_right_ih = delta @ Delta_matrix_ih / t
+                scale_factor_right_ih = delta_ih_cat @ Delta_matrix_ih / t
                 scale_factor_left_ih = activation_input @ X_matrix_ih / t
-                    
-                scale_factor_right_hh = delta @ Delta_matrix_hh / t
+
+                scale_factor_right_hh = delta_hh_cat @ Delta_matrix_hh / t
                 scale_factor_left_hh = activation_hx @ X_matrix_hh / t
                     
                 # 使用预计算的系数提高效率
@@ -475,13 +476,13 @@ class GRUCellFunction(torch.autograd.Function):
                 X_ih_update = activation_input.t() @ scale_factor_right_ih @ inv_Sigma_matrix_ih
                 X_matrix_ih = i_factor * X_matrix_ih + update_factor * X_ih_update
                     
-                Delta_ih_update = delta.t() @ scale_factor_left_ih @ inv_Sigma_matrix_ih
+                Delta_ih_update = delta_ih_cat.t() @ scale_factor_left_ih @ inv_Sigma_matrix_ih
                 Delta_matrix_ih = i_factor * Delta_matrix_ih + update_factor * Delta_ih_update
 
                 X_hh_update = activation_hx.t() @ scale_factor_right_hh @ inv_Sigma_matrix_hh
                 X_matrix_hh = i_factor * X_matrix_hh + update_factor * X_hh_update
 
-                Delta_hh_update = delta.t() @ scale_factor_left_hh @ inv_Sigma_matrix_hh
+                Delta_hh_update = delta_hh_cat.t() @ scale_factor_left_hh @ inv_Sigma_matrix_hh
                 Delta_matrix_hh = i_factor * Delta_matrix_hh + update_factor * Delta_hh_update
                 
                 X_matrix_ih, _, Sigma_ih_signal_X = QR_matrix(X_matrix_ih, X_matrix_ih.shape)
@@ -497,9 +498,9 @@ class GRUCellFunction(torch.autograd.Function):
                 Delta_matrix_hh = Delta_matrix_hh * align_hh.unsqueeze(0)
                     
                 # 批量计算Sigma更新
-                Sigma_ih_product = torch.sum(((delta @ Delta_matrix_ih) * (activation_input @ X_matrix_ih)) / ((i + 1) * t), dim=0)
+                Sigma_ih_product = torch.sum(((delta_ih_cat @ Delta_matrix_ih) * (activation_input @ X_matrix_ih)) / ((i + 1) * t), dim=0)
                 Sigma_ih = i_factor * Sigma_ih + Sigma_ih_product                    
-                Sigma_hh_product = torch.sum(((delta @ Delta_matrix_hh) * (activation_hx @ X_matrix_hh)) / ((i + 1) * t), dim=0)
+                Sigma_hh_product = torch.sum(((delta_hh_cat @ Delta_matrix_hh) * (activation_hx @ X_matrix_hh)) / ((i + 1) * t), dim=0)
                 Sigma_hh = i_factor * Sigma_hh + Sigma_hh_product
                     
                 # XXX:
@@ -528,7 +529,7 @@ class GRUCellFunction(torch.autograd.Function):
                 global_param['sigma_list'].append(Sigma_hh.detach().cpu().numpy())
             
             
-            accumulator.save_sbtpca_parameter(X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih, 
+            accumulator.save_sptt_parameter(X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih, 
                                               X_matrix_hh, Sigma_hh, Sigma_matrix_hh, Delta_matrix_hh)
 
         
