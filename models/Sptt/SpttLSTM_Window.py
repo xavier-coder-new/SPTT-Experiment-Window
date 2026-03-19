@@ -148,7 +148,7 @@ class CustomLSTM(nn.Module):
         self.reset_parameters()
         self.init_stitt_parameters()
         
-        accumulator.save_sbtpca_parameter(self.X_matrix_ih, self.Sigma_ih, self.Sigma_matrix_ih, self.Delta_matrix_ih, 
+        accumulator.save_sptt_parameter(self.X_matrix_ih, self.Sigma_ih, self.Sigma_matrix_ih, self.Delta_matrix_ih, 
                                           self.X_matrix_hh, self.Sigma_hh, self.Sigma_matrix_hh, self.Delta_matrix_hh)
     
     def reset_parameters(self):
@@ -418,7 +418,7 @@ class LSTMCellFunction(torch.autograd.Function):
             grad_w_hh = torch.zeros_like(w_hh)
             
             # 取stitt所需参数
-            X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih, X_matrix_hh, Sigma_hh, Sigma_matrix_hh, Delta_matrix_hh = accumulator.deliver_sbtpca_parameter()
+            X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih, X_matrix_hh, Sigma_hh, Sigma_matrix_hh, Delta_matrix_hh = accumulator.deliver_sptt_parameter()
             # input_cat, hx_cat, delta_cat = accumulator.get_concatenated_gradients()
             activation_input, activation_hx, delta = accumulator.get_concatenated_gradients()
             
@@ -503,7 +503,7 @@ class LSTMCellFunction(torch.autograd.Function):
                     global_param['sigma_list'] = []
                 global_param['sigma_list'].append(Sigma_hh.detach().cpu().numpy())
             
-            accumulator.save_sbtpca_parameter(X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih, 
+            accumulator.save_sptt_parameter(X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih, 
                                               X_matrix_hh, Sigma_hh, Sigma_matrix_hh, Delta_matrix_hh)
             
         return grad_inputs, grad_hx, grad_cx, grad_w_ih, grad_w_hh, grad_b_ih, grad_b_hh, None, None
