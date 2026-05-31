@@ -2,13 +2,17 @@
 
 export CUDA_VISIBLE_DEVICES=0
 
-model_name=BpttLSTM
-data_name=$1
-seed=$2
-echo "$seed, $data_name"
-time_block_num=$3
-learning_rate=$4
-inverse_model=$5
+# SpttLSTM
+# StittLSTM_Hut
+# StittLSTM_Dropout
+#./scripts/classification/Sptt/SpttLSTM.sh
+model_name=BpttGRU
+data_name=PEMS-SF
+seed=2020
+time_block_num=4
+krank=6
+learning_rate=0.001
+inverse_model=align
 train_epochs=300
 patience=25
 root_path=./dataset/"$data_name"/
@@ -17,6 +21,7 @@ root_path=./dataset/"$data_name"/
 # 这个pred_len对于分类任务而言代表的类别数量。
 # num_classes=4
 if [[ "$data_name" == "SelfRegulationSCP1" ]]; then
+  # 最后一个跑
   train_epochs=300
   patience=30
   batch_size=16
@@ -38,6 +43,7 @@ elif [[ "$data_name" == "SelfRegulationSCP2" ]]; then
   num_classes=2
   seq_len=1152
 elif [[ "$data_name" == "FaceDetection" ]]; then
+  # train_epochs=80
   train_epochs=300
   patience=30
   batch_size=32
@@ -59,22 +65,24 @@ elif [[ "$data_name" == "Heartbeat" ]]; then
   num_classes=2
   seq_len=405
 elif [[ "$data_name" == "JapaneseVowels" ]]; then
-  train_epochs=300
-  patience=30
+  train_epochs=800
+  # 倒数第二个跑
+  # train_epochs=300
+  patience=130
   batch_size=16
   feature_dim=12
   num_classes=9
   seq_len=29
 elif [[ "$data_name" == "PEMS-SF" ]]; then
-  train_epochs=800
-  patience=100
+  train_epochs=1000
+  patience=200
   batch_size=16
   feature_dim=963
   num_classes=7
   seq_len=144
 elif [[ "$data_name" == "SpokenArabicDigits" ]]; then
-  train_epochs=1200
-  patience=300
+  train_epochs=2000
+  patience=500
   batch_size=64
   feature_dim=13
   num_classes=10
@@ -82,7 +90,6 @@ elif [[ "$data_name" == "SpokenArabicDigits" ]]; then
 elif [[ "$data_name" == "UWaveGestureLibrary" ]]; then
   train_epochs=300
   patience=30
-  # 太垃圾了，不用
   batch_size=16
   feature_dim=3
   num_classes=8
@@ -99,7 +106,7 @@ python -u run.py \
   --data UEA \
   --data_name "$data_name" \
   --root_path "$root_path" \
-  --krank 10 \
+  --krank $krank \
   --time_block_num $time_block_num \
   --feature_dim "$feature_dim" \
   --itr 1 \
@@ -117,6 +124,7 @@ python -u run.py \
   --num_class "$num_classes" \
   --des 'Exp' \
   --inverse_model $inverse_model \
-  --viz_spectrum_drift \
+  # --viz_spectrum_drift \
   # --record \
   # --viz_batch_level
+

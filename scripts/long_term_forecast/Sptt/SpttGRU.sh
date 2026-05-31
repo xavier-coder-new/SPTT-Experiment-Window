@@ -7,7 +7,7 @@ export CUDA_VISIBLE_DEVICES=0
 # 这样运行bash scripts_name.sh ETTh1, 这样ETTh1自动赋值给name变量了。
 # 
 
-model_name=SpttGRU
+model_name=SpttGRUNew
 data_name=$1
 seed=$2
 echo "当前数据集: $data_name"
@@ -20,6 +20,7 @@ krank=$4
 learning_rate=$5
 # inverse_model=no_align
 inverse_model=$6
+echo "接收的参数 $data_name, $seed, $time_block_num, $krank, $learning_rate, $inverse_model"
 
 if [[ "$data_name" = "ETTh1" || "$data_name" = "ETTh2" || "$data_name" = "ETTm1" || "$data_name" = "ETTm2" ]]; then
     data_dict=$data_name

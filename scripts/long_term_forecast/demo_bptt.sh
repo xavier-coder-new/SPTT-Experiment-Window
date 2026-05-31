@@ -7,16 +7,16 @@ export CUDA_VISIBLE_DEVICES=0
 # 这样运行bash scripts_name.sh ETTh1, 这样ETTh1自动赋值给name变量了。
 # 
 
-model_name=BpttLSTM
-data_name=ETTh1
-seed=2025
+model_name=BpttGRU
+data_name=exchange_rate
+seed=2026
 echo "当前数据集: $data_name"
 # M: 多变量预测多变量， MS: 多变量预测单变量， S: 单变量预测单变量
 features=M
 train_epochs=300
 patience=10
-krank=7
 time_block_num=8
+krank=7
 learning_rate=0.001
 inverse_model=align
 
@@ -26,7 +26,8 @@ if [[ "$data_name" = "ETTh1" || "$data_name" = "ETTh2" || "$data_name" = "ETTm1"
     feature_dim=7
     if [[ "$data_name" = "ETTh1" || "$data_name" = "ETTh2" ]]; then
         echo "使用ETTh数据集"
-        batch_size=64
+        # batch_size=64
+        batch_size=1
         seq_len=384
         pred_len=96
         label=384_96
@@ -114,9 +115,6 @@ python -u run.py \
     --seq_len "$seq_len" \
     --pred_len "$pred_len" \
     --estimation_method None \
-    --inverse_model $inverse_model \
-    --viz_spectrum_drift \
-    # --record \
-    # --viz_batch_level
+    --inverse_model $inverse_model
 
 

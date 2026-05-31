@@ -1,16 +1,18 @@
 #!/bin/bash
+export CUDA_VISIBLE_DEVICES=0
 
 model_name=BpttLSTM
 data_name=$1
 seed=$2
 time_block_num=$3
-learning_rate=$4
-inverse_model=$5
+krank=$4
+learning_rate=$5
+inverse_model=$6
 mask_rate=0.25
 features=M
 train_epochs=300
 patience=10
-krank=7
+# krank=7
 
 if [[ "$data_name" = "ETTh1" || "$data_name" = "ETTh2" || "$data_name" = "ETTm1" || "$data_name" = "ETTm2" ]]; then
     data_dict=$data_name

@@ -1,14 +1,18 @@
 #!/bin/bash
-
 export CUDA_VISIBLE_DEVICES=0
 
-model_name=SpttGRU
-seed=$2
+model_name=BpttSRU
 data_name=$1
-mask_rate=$3
+seed=$2
+time_block_num=$3
+krank=$4
+learning_rate=$5
+inverse_model=$6
+mask_rate=0.25
 features=M
 train_epochs=300
-patience=10
+patience=15
+# krank=7
 
 if [[ "$data_name" = "ETTh1" || "$data_name" = "ETTh2" || "$data_name" = "ETTm1" || "$data_name" = "ETTm2" ]]; then
     data_dict=$data_name
@@ -18,8 +22,6 @@ if [[ "$data_name" = "ETTh1" || "$data_name" = "ETTh2" || "$data_name" = "ETTm1"
     # 这里需要注意一点，在做imputation（缺失值补全）任务时，通常输入长度seq_len和输出长度pred_len
     # 要设置为一样的，因为输入和输出都是完整的序列，而不是预测未来值。
         echo "使用ETTh1数据集"
-        train_epochs=2000
-        patience=500
         batch_size=64
         seq_len=96
         pred_len=96
@@ -75,14 +77,14 @@ python -u run.py \
     --root_path "$root_path" \
     --data_path "$data_name".csv \
     --features $features \
-    --krank 10 \
-    --time_block_num 4 \
+    --krank $krank \
+    --time_block_num $time_block_num \
     --feature_dim "$feature_dim" \
     --itr 1 \
     --train_epochs $train_epochs \
     --batch_size "$batch_size" \
     --patience "$patience" \
-    --learning_rate 0.001 \
+    --learning_rate $learning_rate \
     --loss MSE \
     --lradj type3 \
     --tmax 10 \
@@ -92,6 +94,6 @@ python -u run.py \
     --hidden_dim 512 \
     --seq_len "$seq_len" \
     --pred_len "$pred_len" \
-    --estimation_method Hut \
+    --estimation_method None \
     --mask_rate "$mask_rate" \
-
+    --inverse_model $inverse_model

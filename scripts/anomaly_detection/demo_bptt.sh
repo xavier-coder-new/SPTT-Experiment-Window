@@ -7,16 +7,16 @@ export CUDA_VISIBLE_DEVICES=0
 # 这样运行bash scripts_name.sh ETTh1, 这样ETTh1自动赋值给name变量了。
 # 
 
-model_name=BpttLSTM
-data_name=$1
-seed=$2
-time_block_num=$3
-krank=$4
-learning_rate=$5
-inverse_model=$6
+model_name=BpttSRU
+data_name=MSL
+seed=2026
+time_block_num=8
+krank=10
+learning_rate=0.0001
+inverse_model=align
 # M: 多变量预测多变量， MS: 多变量预测单变量， S: 单变量预测单变量
 features=M
-train_epochs=100
+train_epochs=50
 pred_len=0
 patience=10
 
@@ -87,7 +87,7 @@ python -u run.py \
     --anomaly_ratio "$anomaly_ratio" \
     --estimation_method None \
     --inverse_model $inverse_model \
-    --viz_spectrum_drift \
+    # --viz_spectrum_drift \
     # --record \
     # --viz_batch_level
 

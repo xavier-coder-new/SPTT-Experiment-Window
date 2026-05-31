@@ -11,16 +11,18 @@ export CUDA_VISIBLE_DEVICES=0
 # StittLSTM_Dropout 先全部高斯化，再求梯度， 再传递
 
 model_name=SpttLSTM
-data_name=ETTm2
-seed=2025
+data_name=electricity
+seed=2024
 time_block_num=8
 krank=7
 learning_rate=0.001
 inverse_model=align
 mask_rate=0.25
 features=M
-train_epochs=300
-patience=10
+# train_epochs=300
+# patience=10
+train_epochs=500
+patience=50
 
 if [[ "$data_name" = "ETTh1" || "$data_name" = "ETTh2" || "$data_name" = "ETTm1" || "$data_name" = "ETTm2" ]]; then
     data_dict=$data_name
@@ -107,7 +109,7 @@ python -u run.py \
     --estimation_method Hut \
     --mask_rate "$mask_rate" \
     --inverse_model $inverse_model \
-    --viz_spectrum_drift \
+    # --viz_spectrum_drift \
     # --record \
     # --viz_batch_level
 

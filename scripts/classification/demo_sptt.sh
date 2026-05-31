@@ -6,10 +6,10 @@ export CUDA_VISIBLE_DEVICES=0
 # StittLSTM_Hut
 # StittLSTM_Dropout
 #./scripts/classification/Sptt/SpttLSTM.sh
-model_name=SpttLSTM
-data_name=JapaneseVowels
-seed=2025
-time_block_num=8
+model_name=SpttGRUNew
+data_name=PEMS-SF
+seed=2020
+time_block_num=4
 krank=6
 learning_rate=0.001
 inverse_model=align
@@ -23,7 +23,8 @@ root_path=./dataset/"$data_name"/
 if [[ "$data_name" == "SelfRegulationSCP1" ]]; then
   # 最后一个跑
   train_epochs=300
-  patience=30
+  # patience=30
+  patience=10
   batch_size=16
   feature_dim=6
   num_classes=2
@@ -51,8 +52,9 @@ elif [[ "$data_name" == "FaceDetection" ]]; then
   num_classes=2
   seq_len=62
 elif [[ "$data_name" == "Handwriting" ]]; then
-  train_epochs=300
-  patience=30
+  train_epochs=800
+  patience=200
+  # batch_size=16
   batch_size=16
   feature_dim=3
   num_classes=26
@@ -124,7 +126,7 @@ python -u run.py \
   --num_class "$num_classes" \
   --des 'Exp' \
   --inverse_model $inverse_model \
-  --viz_spectrum_drift \
+  # --viz_spectrum_drift \
   # --record \
   # --viz_batch_level
 

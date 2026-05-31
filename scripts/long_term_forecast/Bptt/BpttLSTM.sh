@@ -15,10 +15,10 @@ echo "当前数据集: $data_name"
 features=M
 train_epochs=300
 patience=10
-krank=7
 time_block_num=$3
-learning_rate=$4
-inverse_model=$5
+krank=$4
+learning_rate=$5
+inverse_model=$6
 
 if [[ "$data_name" = "ETTh1" || "$data_name" = "ETTh2" || "$data_name" = "ETTm1" || "$data_name" = "ETTm2" ]]; then
     data_dict=$data_name
@@ -26,7 +26,8 @@ if [[ "$data_name" = "ETTh1" || "$data_name" = "ETTh2" || "$data_name" = "ETTm1"
     feature_dim=7
     if [[ "$data_name" = "ETTh1" || "$data_name" = "ETTh2" ]]; then
         echo "使用ETTh数据集"
-        batch_size=64
+        # batch_size=64
+        batch_size=1
         seq_len=384
         pred_len=96
         label=384_96

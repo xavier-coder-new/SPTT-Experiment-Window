@@ -5,10 +5,10 @@ export CUDA_VISIBLE_DEVICES=0
 model_name=BpttLSTM
 data_name=$1
 seed=$2
-echo "$seed, $data_name"
 time_block_num=$3
-learning_rate=$4
-inverse_model=$5
+krank=$4
+learning_rate=$5
+inverse_model=$6
 train_epochs=300
 patience=25
 root_path=./dataset/"$data_name"/
@@ -40,7 +40,7 @@ elif [[ "$data_name" == "SelfRegulationSCP2" ]]; then
 elif [[ "$data_name" == "FaceDetection" ]]; then
   train_epochs=300
   patience=30
-  batch_size=32
+  batch_size=1
   feature_dim=144
   num_classes=2
   seq_len=62

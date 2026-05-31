@@ -46,7 +46,8 @@ elif [[ "$data_name" == "FaceDetection" ]]; then
   # train_epochs=80
   train_epochs=300
   patience=30
-  batch_size=32
+  # batch_size=32
+  batch_size=1
   feature_dim=144
   num_classes=2
   seq_len=62

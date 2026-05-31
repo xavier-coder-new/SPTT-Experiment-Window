@@ -2,18 +2,17 @@
 
 export CUDA_VISIBLE_DEVICES=0
 
-# 获取命令行参数
-# name=$1
-# 这样运行bash scripts_name.sh ETTh1, 这样ETTh1自动赋值给name变量了。
-# 
-
-model_name=SpttGRU_T
-seed=$2
+model_name=SpttSRU
 data_name=$1
-mask_rate=$3
+seed=$2
+time_block_num=$3
+krank=$4
+learning_rate=$5
+inverse_model=$6
+mask_rate=0.25
 features=M
 train_epochs=300
-patience=10
+patience=15
 
 if [[ "$data_name" = "ETTh1" || "$data_name" = "ETTh2" || "$data_name" = "ETTm1" || "$data_name" = "ETTm2" ]]; then
     data_dict=$data_name
@@ -80,14 +79,14 @@ python -u run.py \
     --root_path "$root_path" \
     --data_path "$data_name".csv \
     --features $features \
-    --krank 10 \
-    --time_block_num 4 \
+    --krank $krank \
+    --time_block_num $time_block_num \
     --feature_dim "$feature_dim" \
     --itr 1 \
     --train_epochs $train_epochs \
     --batch_size "$batch_size" \
     --patience "$patience" \
-    --learning_rate 0.001 \
+    --learning_rate $learning_rate \
     --loss MSE \
     --lradj type3 \
     --tmax 10 \
@@ -99,5 +98,5 @@ python -u run.py \
     --pred_len "$pred_len" \
     --estimation_method Hut \
     --mask_rate "$mask_rate" \
-
+    --inverse_model $inverse_model
 

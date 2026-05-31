@@ -2,7 +2,7 @@
 
 export CUDA_VISIBLE_DEVICES=0
 
-model_name=SpttGRU
+model_name=SpttGRUNew
 data_name=$1
 seed=$2
 time_block_num=$3

@@ -12,18 +12,19 @@ export CUDA_VISIBLE_DEVICES=0
 # SpttLSTM
 # StittLSTM_Dropout
 model_name=SpttLSTM
-data_name=ETTh1
-seed=2025
+data_name=exchange_rate
+seed=2026
 echo "当前数据集: $data_name"
 # M: 多变量预测多变量， MS: 多变量预测单变量， S: 单变量预测单变量
 features=M
-# 这个设置不同的值还影响效果呢。结果有轻微波动。
 train_epochs=300
 patience=10
-time_block_num=1
+time_block_num=8
 krank=7
 learning_rate=0.001
+# inverse_model=no_align
 inverse_model=align
+echo "接收的参数 $data_name, $seed, $time_block_num, $krank, $learning_rate, $inverse_model"
 
 if [[ "$data_name" = "ETTh1" || "$data_name" = "ETTh2" || "$data_name" = "ETTm1" || "$data_name" = "ETTm2" ]]; then
     data_dict=$data_name
@@ -31,7 +32,8 @@ if [[ "$data_name" = "ETTh1" || "$data_name" = "ETTh2" || "$data_name" = "ETTm1"
     feature_dim=7
     if [[ "$data_name" = "ETTh1" || "$data_name" = "ETTh2" ]]; then
         echo "使用ETTh数据集"
-        batch_size=64
+        # batch_size=64
+        batch_size=1
         seq_len=384
         pred_len=96
         label=384_96
@@ -120,8 +122,5 @@ python -u run.py \
     --pred_len "$pred_len" \
     --estimation_method Hut \
     --inverse_model $inverse_model \
-    --viz_spectrum_drift \
-    # --record \
-    # --viz_batch_level
 
 

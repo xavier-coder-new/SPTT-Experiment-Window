@@ -5,10 +5,11 @@ export CUDA_VISIBLE_DEVICES=0
 model_name=BpttGRU
 data_name=$1
 seed=$2
-echo "$seed, $data_name"
 time_block_num=$3
-learning_rate=$4
-inverse_model=$5
+krank=$4
+learning_rate=$5
+inverse_model=$6
+
 train_epochs=300
 patience=25
 root_path=./dataset/"$data_name"/
@@ -102,7 +103,7 @@ python -u run.py \
   --data UEA \
   --data_name "$data_name" \
   --root_path "$root_path" \
-  --krank 10 \
+  --krank $krank \
   --time_block_num $time_block_num \
   --feature_dim "$feature_dim" \
   --itr 1 \

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-model_name=BpttLSTM
+model_name=BpttSRU
 data_name=ETTm2
 seed=2025
 time_block_num=8
@@ -95,6 +95,6 @@ python -u run.py \
     --estimation_method None \
     --mask_rate "$mask_rate" \
     --inverse_model $inverse_model \
-    --viz_spectrum_drift \
+    # --viz_spectrum_drift \
     # --record \
     # --viz_batch_level
