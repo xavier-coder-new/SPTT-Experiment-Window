@@ -30,5 +30,7 @@ __pycache__/
 .Python
 /viz_spectrum_drift
 /exp/__pychache__
+/paper_data
+/figures
 
 
