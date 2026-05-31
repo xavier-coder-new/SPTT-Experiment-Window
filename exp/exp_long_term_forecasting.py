@@ -260,6 +260,21 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                         _, Sigma, _ = torch.linalg.svd(grad_w_hh, full_matrices=False)
                         truncated_sigma = Sigma[:self.args.krank]
                         global_param['sigma_list'].append(truncated_sigma.cpu().numpy())
+                        
+                if self.args.viz_spectrum_drift and self.args.model in {'BpttMinLSTM', 'BpttMinGRU'}:
+                    grad_w_ih = None
+                    for name, param in self.model.named_parameters():
+                        if 'w_ih' in name and param.grad is not None:
+                            grad_w_ih = param.grad.detach().float()
+                            break
+                    assert grad_w_ih is not None, "grad_w_ih is None"
+                    if grad_w_ih is not None:    
+                        if 'sigma_list' not in global_param:
+                            ic("model name: ", self.args.model, "allow to record spectrum drift")
+                            global_param['sigma_list'] = []
+                        _, Sigma, _ = torch.linalg.svd(grad_w_ih, full_matrices=False)
+                        truncated_sigma = Sigma[:self.args.krank]
+                        global_param['sigma_list'].append(truncated_sigma.cpu().numpy())
                 
                 time_for_batch = global_param['time_for_batch']
                 if time_for_batch > max_time_batch:

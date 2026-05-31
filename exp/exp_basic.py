@@ -1,7 +1,7 @@
 import os
 import torch
-from models.Bptt import BpttLSTM, BpttGRU
-from models.Sptt import SpttGRU_Window, SpttLSTM_Window
+from models.Bptt import BpttLSTM, BpttGRU, BpttMinLSTM, BpttMinGRU, BpttSRU
+from models.Sptt import SpttGRU_Window, SpttLSTM_Window, SpttMinGRU_Window, SpttMinLSTM_Window, SpttSRU_Window
 
 class Exp_Basic(object):
     def __init__(self, args):
@@ -11,6 +11,12 @@ class Exp_Basic(object):
             'BpttGRU': BpttGRU,
             'SpttLSTM': SpttLSTM_Window,
             'SpttGRUNew': SpttGRU_Window,
+            'SpttMinLSTM': SpttMinLSTM_Window,
+            'SpttMinGRU': SpttMinGRU_Window,
+            'SpttSRU': SpttSRU_Window,
+            'BpttMinLSTM': BpttMinLSTM,
+            'BpttMinGRU': BpttMinGRU,
+            'BpttSRU': BpttSRU
         }
 
         self.device = self._acquire_device()
