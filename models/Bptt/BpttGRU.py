@@ -263,7 +263,8 @@ class CustomGRU(nn.Module):
             # seq_len = x.size(1)
             # hx = torch.zeros(num_samples, self.hidden_dim).to(self.device)
             
-            time_step = 1
+            # time_step = 1
+            time_step = 0
             for i in range(x.size(1)):
                 time_step += 1
                 inputs = x[:, i, :]

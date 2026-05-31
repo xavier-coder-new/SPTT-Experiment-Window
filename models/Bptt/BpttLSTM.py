@@ -262,9 +262,8 @@ class CustomLSTM(nn.Module):
                 return loss
         
         elif model_optim is None and criterion is None: 
-
-            
-            time_step = 1
+            # time_step = 1
+            time_step = 0
             for i in range(x.size(1)):
                 time_step += 1
                 inputs = x[:, i, :]

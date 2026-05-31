@@ -14,34 +14,9 @@ accumulator = GradientAccumulator()
 # V1版本结果很令人兴奋，结果和StittLSTM一样，但更快了。
 # 探究采样行数对准确性，收敛速度，传播时间的影响。
 
-def chodral_subspace_drift(Q_matrix_old: torch.Tensor, Q_matrix_new: torch.Tensor) -> torch.Tensor:
-    """
-    [unit_dim, krank]
-    Q_matrix_old, Q_matrix_new: [d, k] with orthonormal columns.
-    Returns scalar drift (chordal distance): sqrt(k - ||Q_old^T Q_new||_F^2)
-    M: Q_old.T @ Q_new
-    """
-    k = Q_matrix_old.shape[1]
-    M = Q_matrix_old.transpose(0, 1) @ Q_matrix_new
-    frob_sq = torch.sum(M ** 2)
-    drift_sq = torch.clamp(k - frob_sq, min=0.0)
-    return torch.sqrt(drift_sq)
-
-
-"""Version 1"""
 def QR_matrix(X_matrix, target_shape):
     Q, R, diagonal_sign = qr_with_non_negative_diagonal(X_matrix)
-    # ic(Q.shape, target_shape)
     
-    # 使用预分配和高效索引
-    if Q.shape != target_shape:
-        # 进入这个会出现nan数值错误
-        assert Q.shape == target_shape, "not permit to change matrix shape"
-        result = torch.zeros(target_shape, device=X_matrix.device, dtype=X_matrix.dtype)
-        result[:min(Q.shape[0], target_shape[0]), :min(Q.shape[1], target_shape[1])] = \
-            Q[:min(Q.shape[0], target_shape[0]), :min(Q.shape[1], target_shape[1])]
-        return result, R, diagonal_sign
-    # ic(Q.shape, diagonal_sign.shape)
     return Q, R, diagonal_sign
     
 def qr_with_non_negative_diagonal(matrix):
@@ -100,19 +75,6 @@ class Model(nn.Module):
     def forward(self, x, target=None, criterion=None, model_optim=None, inp=None, mask=None):
         # 返回的是一个元组，主程序训练的时候，已经实现了解包操作。
         result = self.lstm(x, target, criterion, model_optim, inp=inp, mask=mask)
-        # fc_out = self.fc(final_hidden)
-        # # print("fc_out shape: ", fc_out.shape)
-        # # fc_out shape [64, 672]
-        # if self.task_name == 'long_term_forecast':
-        #     y = fc_out.view(-1, self.output_size, self.feature_dim)
-        # elif self.task_name == 'classification':
-        #     y = fc_out
-        # elif self.task_name == 'imputation':
-        #     y = fc_out.view(-1, self.output_size, self.feature_dim)
-        # elif self.task_name == 'anomaly_detection':
-        #     y = fc_out.view(-1, self.output_size, self.feature_dim)
-        # # print ("y shape: ", y.shape)
-        # # y shape [64, 96, 7]
         
         return result
     
@@ -336,7 +298,8 @@ class CustomLSTM(nn.Module):
             # num_samples = x.size(0)
             # seq_len = x.size(1)
             
-            time_step = 1
+            # time_step = 1
+            time_step = 0
             for i in range(x.size(1)):
                 time_step += 1
                 inputs = x[:, i, :]
@@ -498,10 +461,10 @@ class LSTMCellFunction(torch.autograd.Function):
             
             global_param['time_for_batch'] += time_backward
             
-            if global_param['viz_spectrum_drift']:
-                if 'sigma_list' not in global_param:
-                    global_param['sigma_list'] = []
-                global_param['sigma_list'].append(Sigma_hh.detach().cpu().numpy())
+            # if global_param['viz_spectrum_drift']:
+            #     if 'sigma_list' not in global_param:
+            #         global_param['sigma_list'] = []
+            #     global_param['sigma_list'].append(Sigma_hh.detach().cpu().numpy())
             
             accumulator.save_sptt_parameter(X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih, 
                                               X_matrix_hh, Sigma_hh, Sigma_matrix_hh, Delta_matrix_hh)
