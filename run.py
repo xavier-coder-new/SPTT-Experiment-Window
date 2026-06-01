@@ -41,16 +41,13 @@ if __name__  == "__main__":
     parser.add_argument('--freq', type=str, default='h', help='freq for time features encoding, options:[s:secondly, t:minutely, h:hourly, d:daily, b:business days, w:weekly, m:monthly, q:quarterly, a:annually]')
     parser.add_argument('--checkpoints', type=str, default='./checkpoints/', help='location of model checkpoints')
 
-    # action='store_true', 开关型命令行参数
-    # #当用户在命令行中添加 --inverse 参数时，它会将 args.inverse 设置为 True，而如果没有提供该参数，则 args.inverse 会默认是 False。
     parser.add_argument('--inverse', action='store_true', help='inverse output data', default=False)
     
     # model define
     parser.add_argument('--krank', type=int, default=10, help='SVD rank for STITT')
     parser.add_argument('--time_block_num', type=int, default=4, help='time block num for STITT')
     parser.add_argument('--data_name', type=str, required=True, default='ETTh1', help='dataset name')
-    # c_out:输出维度，定义了模型最终的预测输出维度。表示模型在每个预测时间步需要输出多少个变量。
-    # 直接决定了模型的预测结果的形式。
+
     parser.add_argument('--feature_dim', type=int, required=True, default=7, help='feature dimension')
     parser.add_argument('--dropout', type=float, default=0.1, help='dropout')
     parser.add_argument('--activation', type=str, default='gelu', help='activation')
@@ -67,7 +64,7 @@ if __name__  == "__main__":
     parser.add_argument('--des', type=str, default='test', help='exp description')
     parser.add_argument('--loss', type=str, default='MSE', help='loss function')
     parser.add_argument('--lradj', type=str, default='type3', help='adjust learning rate \
-                            type1:指数衰减, type2:阶段衰减, type3:余弦退火')
+                            type1:exponential decay, type2:step decay, type3:Cosine annealing')
     parser.add_argument('--tmax', type=int, default=10)
     
     # GPU
@@ -80,16 +77,10 @@ if __name__  == "__main__":
     # RNN basic hyper params
     parser.add_argument('--hidden_dim', type=int, required=True, default=512, help='RNN hidden unit')    
     parser.add_argument('--seq_len', type=int, default=96, help='input sequence length')
-    # label_len： 解码器起始长度，这个值通常用于Transformer类模型的解码器部分。
     parser.add_argument('--label_len', type=int, default=48, help='start token length')
     parser.add_argument('--pred_len', type=int, default=96, help='prediction sequence length')
     parser.add_argument('--seasonal_patterns', type=str, default='Monthly', help='subset for M4')
-    parser.add_argument('--dropout_x', type=float, default=0.0, help='dropout for X')
-    parser.add_argument('--dropout_d', type=float, default=0.0, help='dropout for D')
-    parser.add_argument('--hutchinson_size', type=int, default=100, help='Hutchinson sample size')
-    parser.add_argument('--random_size', type=int, default=100, help='random sample size')
     parser.add_argument('--estimation_method', type=str, default='Hut', help='estimation method: Hut, Random, Dropout, None')
-    parser.add_argument('--trials', type=int, default=5, help='trials for Dropout estimation')
     parser.add_argument('--enc_in', type=int, default=7, help='encoder input size')
     parser.add_argument('--num_classes', type=int, default=4, help='number of classes for classification')
     
@@ -100,9 +91,6 @@ if __name__  == "__main__":
     parser.add_argument('--anomaly_ratio', type=float, default=1, help='anomaly ratio')
     parser.add_argument('--record', action='store_true', help='record the trajectories of singular values')
     parser.add_argument('--inverse_model', type=str, default="stable", help='stable inverse or normal inverse')
-    parser.add_argument('--viz_batch_level', action='store_true', help='viz all batch')
-    parser.add_argument('--viz_spectrum_drift', action='store_true', help='visualize spectrum drift')
-    parser.add_argument('--viz_energy_rentention', action='store_true', help='visualize energy retention')
     
     
     args = parser.parse_args()
@@ -113,12 +101,7 @@ if __name__  == "__main__":
     random.seed(fix_seed)
     np.random.seed(fix_seed)
     torch.manual_seed(fix_seed)
-    
-    global_param['trials'] = args.trials
-    global_param['viz_batch_level'] = args.viz_batch_level
-    global_param['viz_spectrum_drift'] = args.viz_spectrum_drift
-    global_param['viz_energy_rentention'] = args.viz_energy_rentention
-    
+
     if torch.cuda.is_available() and args.use_gpu:
         args.device = torch.device('cuda:{}'.format(args.gpu))
         print('Using GPU')
@@ -139,13 +122,13 @@ if __name__  == "__main__":
     # print_args(args)
     
     if args.task_name == 'long_term_forecast':
-        # Exp = Exp_Long_Term_Forecast
-        Exp = Exp_Long_Term_Forecast_Plot_Loss
+        Exp = Exp_Long_Term_Forecast
+        # Exp = Exp_Long_Term_Forecast_Plot_Loss
     elif args.task_name == 'short_term_forecast':
         Exp = Exp_Short_Term_Forecast
     elif args.task_name == 'classification':
-        # Exp = Exp_Classification
-        Exp = Exp_Classification_Plot_Loss
+        Exp = Exp_Classification
+        # Exp = Exp_Classification_Plot_Loss
     elif args.task_name == 'imputation':
         Exp = Exp_Imputation
     elif args.task_name == 'anomaly_detection':
@@ -166,7 +149,6 @@ if __name__  == "__main__":
                 args.seq_len,
                 args.label_len,
                 args.pred_len,
-                # args.d_ff, 全连接层的维度
                 args.embed,
                 args.des, ii)
             
@@ -180,7 +162,6 @@ if __name__  == "__main__":
             elif args.gpu_type == 'cuda':
                 torch.cuda.empty_cache()
     else:
-        # 这个地方用于加载已经训练好的模型参数
         exp = Exp(args)  # set experiments
         ii = 0
         setting = '{0}_{1}_{2}_{3}_sd_{4}_ft{5}_sl{6}_ll{7}_pl{8}_{9}_{10}_{11}'.format(
@@ -193,7 +174,6 @@ if __name__  == "__main__":
             args.seq_len,
             args.label_len,
             args.pred_len,
-            # args.d_ff, 全连接层的维度
             args.embed,
             args.des, ii)
 

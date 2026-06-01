@@ -5,32 +5,22 @@ import torch.nn as nn
 import math
 from global_param import global_param
 import time
-from utils.GradientAccumulator import GradientAccumulator
+from utils.GradientAccumulator_LSTM import GradientAccumulator
 import numpy as np
 
 accumulator = GradientAccumulator()
 
-# V1版本相比于传统的StittLSTM优化了QR分解的效率,但其本质不变， 以及对一些处理预先分配内存。
-# V1版本结果很令人兴奋，结果和StittLSTM一样，但更快了。
-# 探究采样行数对准确性，收敛速度，传播时间的影响。
-
 def QR_matrix(X_matrix, target_shape):
     Q, R, diagonal_sign = qr_with_non_negative_diagonal(X_matrix)
-    
     return Q, R, diagonal_sign
     
 def qr_with_non_negative_diagonal(matrix):
-    # 进行QR分解
     Q, R = torch.linalg.qr(matrix)
     
-    # 获取 R 矩阵对角线元素的符号
     diagonal_sign = torch.sign(torch.diag(R))
     
-    # 避免对角线元素为零的情况
     diagonal_sign[diagonal_sign == 0] = 1
-    # ic(diagonal_sign)
-    
-    # 调整 Q 矩阵的列符号和Q = Q * diagonal_sign得到的结果一样。
+
     Q1 = Q * diagonal_sign.unsqueeze(0)
     
     R = diagonal_sign.unsqueeze(1) * R
@@ -48,7 +38,7 @@ class Model(nn.Module):
         self.krank = config.krank
         self.task_name = config.task_name
         self.time_block_num = config.time_block_num
-        # 如果是多变量预测多变量的问题，全连接层的输出尺寸应该是 特征维度 X 预测长度
+
         if self.task_name == 'long_term_forecast':
             self.output_size = config.pred_len
             self.feature_dim = config.feature_dim
@@ -73,7 +63,6 @@ class Model(nn.Module):
             raise ValueError("Task name not supported!")
 
     def forward(self, x, target=None, criterion=None, model_optim=None, inp=None, mask=None):
-        # 返回的是一个元组，主程序训练的时候，已经实现了解包操作。
         result = self.lstm(x, target, criterion, model_optim, inp=inp, mask=mask)
         
         return result
@@ -114,9 +103,7 @@ class CustomLSTM(nn.Module):
                                           self.X_matrix_hh, self.Sigma_hh, self.Sigma_matrix_hh, self.Delta_matrix_hh)
     
     def reset_parameters(self):
-        # 定义标准差
         std = 1.0 / math.sqrt(self.hidden_dim)
-        # 初始化参数
         for weight in self.parameters():
             weight.data.uniform_(-std, std)
             
@@ -132,32 +119,22 @@ class CustomLSTM(nn.Module):
         self.Delta_matrix_hh = torch.randn(4 * self.hidden_dim, self.krank).to(self.device)
 
     def forward(self, x, targets=None, criterion=None, model_optim=None, inp=None, mask=None):
-        # x的shape表示[batch_size, seq_len, feature_dim]
         global_param['time_for_batch'] = 0.0
         
         if self.task_name == 'imputation':
             x_new = x
             x = inp
         
-        # 获取输入序列的第一个尺度batch_size，进行隐藏状态和细胞状态的初始化
         num_samples = x.size(0)
         seq_len = x.size(1)
         
-        # 在RNN做时间序列预测中，要对每个样本初始化一个隐藏状态和细胞状态
         hx = torch.zeros(num_samples, self.hidden_dim).to(self.device)
         cx = torch.zeros(num_samples, self.hidden_dim).to(self.device)
         
-        # 总的元素数
-        # T = num_samples * seq_len # 这个其实就是按行拼接完所有时间步最后所有的行数。
-        
-        # truncate_length = seq_len // self.time_block_num
-        
-        # 划分时间块的索引
         indices = np.linspace(0, seq_len, self.time_block_num + 1, dtype=int)
         
         sum_loss = 0.0
         
-        # total_chunks = (seq_len + truncate_length - 1) // truncate_length
         if model_optim is not None:
             chunk_block = 0
             for i in range(self.time_block_num):
@@ -165,40 +142,26 @@ class CustomLSTM(nn.Module):
                 chunk_start = indices[i]
                 chunk_end = indices[i + 1]
                 chunk_block += 1
-                # 判断是否是最后一个chunk.
                 if i == self.time_block_num - 1:
                     is_last_chunk = True
                 else:
                     is_last_chunk = False
-                
-                # 截断梯度流，但保持状态连续性
+
                 if chunk_start > 0:
-                    # 保留数值前向继续，但断开反向传播图,，这样确保每个时间块之间状态连续但梯度不连续。
                     hx.detach_()
                     cx.detach_()
                 
-                # 处理当前chunk的时间步
                 time_step = 0
                 for j in range(chunk_start, chunk_end):
-                    # 这是一个三维的张量，表示取x的全部batch，第一个时间步的全部特征维度。
-                    # 这样数据的话每次就是
-                    # [1 1 1 1
-                    # 2 2 2 2
-                    # 3 3 3 3]
                     time_step += 1
-                    # 只有反向传播到第一个时间步的时候，表示当前时间块处理完毕，再进行梯度更新
                     inputs = x[:, j, :]
                     hx, cx = LSTMCellFunction.apply(
                         inputs, hx, cx, self.w_ih, self.w_hh, self.b_ih, self.b_hh, time_step, chunk_block
                     )
-                    
-                # global_param['compression_finished'] = True
                 
                 fc_out = self.fc(hx)
                 
-                # 计算损失(训练)
                 if self.task_name == "long_term_forecast":
-                    # print("fc_out", fc_out.shape)
                     y = fc_out.view(-1, self.output_size, self.feature_dim)
                     f_dim = -1 if self.config.features == 'MS' else 0
                     outputs = y[:, -self.config.pred_len:, f_dim:]
@@ -208,8 +171,6 @@ class CustomLSTM(nn.Module):
                     outputs = fc_out
                     loss = criterion(outputs, targets.long().squeeze(-1))
                 elif self.task_name == 'anomaly_detection':
-                    # print("fc_out", fc_out.shape)
-                    # print("进来了进来了！！！！！！！！！！！！！！！！！")
                     y = fc_out.view(-1, self.output_size_anomaly, self.feature_dim)
                     f_dim = -1 if self.config.features == 'MS' else 0
                     outputs = y[:, :, f_dim:]
@@ -224,25 +185,18 @@ class CustomLSTM(nn.Module):
                     loss = criterion(outputs[mask == 0], batch_x[mask == 0])
                 
                 sum_loss += loss.item()
-                
-                # print("loss is tensor?", type(loss))
-                # print("sum_loss is tensor?", type(sum_loss))
 
-                
                 if not is_last_chunk:
                     model_optim.zero_grad()
-                    # 如果不是最后一个chunk进行反向传播更新梯度和参数
                     loss.backward()
                     model_optim.step()
 
-            # 如果是最后一个last_chunk，直接返回loss，在主程序反向传播，更新梯度和权重 
             if self.task_name == 'classification':
                 return outputs, loss, sum_loss
             else:
                 return loss, sum_loss
                         
         elif model_optim is None and criterion is not None:
-            # 进行验证
             time_step = 0
             for i in range(x.size(1)):
                 time_step += 1
@@ -264,8 +218,6 @@ class CustomLSTM(nn.Module):
                 loss = criterion(pred, true)
             elif self.task_name == 'classification':
                 outputs = fc_out
-                # pred = outputs.detach().cpu()
-                # loss = criterion(pred, targets.long().squeeze().cpu())
             elif self.task_name == 'anomaly_detection':
                 y = fc_out.view(-1, self.output_size_anomaly, self.feature_dim)
                 f_dim = -1 if self.config.features == 'MS' else 0
@@ -293,12 +245,7 @@ class CustomLSTM(nn.Module):
                 return loss
         
         elif model_optim is None and criterion is None:
-            # 进行测试
             accumulator.reset()
-            # num_samples = x.size(0)
-            # seq_len = x.size(1)
-            
-            # time_step = 1
             time_step = 0
             for i in range(x.size(1)):
                 time_step += 1
@@ -338,7 +285,6 @@ class LSTMCellFunction(torch.autograd.Function):
         ctx.time_step = time_step
         ctx.chunk_block = chunk_block
         
-        # 返回一个零时间，真正的时间将在backward中测量。
         return hy, cy
     
     @staticmethod
@@ -347,52 +293,35 @@ class LSTMCellFunction(torch.autograd.Function):
         time_step = ctx.time_step
         chunk_block = ctx.chunk_block
         
-        # 初始化梯度
         grad_inputs = grad_hx = grad_cx = grad_w_ih = grad_w_hh = grad_b_ih = grad_b_hh = None
         
-        # 计算梯度
         grad_outgate = grad_hy * torch.tanh(cy) * outgate * (1 - outgate)
         grad_cy = grad_hy * outgate * (1 - torch.tanh(cy) ** 2) + grad_cy
         grad_ingate = grad_cy * cellgate * ingate * (1 - ingate)
         grad_cellgate = grad_cy * ingate * (1 - cellgate ** 2)
         grad_forgetgate = grad_cy * cx * forgetgate * (1 - forgetgate)
-        
-        # if global_param['flag']:
-        # 保存stitt所用的参数
+
         delta = torch.cat((grad_ingate, grad_forgetgate, grad_cellgate, grad_outgate), 1)
         accumulator.accumulate(inputs, hx, delta)
         
-        # 计算输入和隐藏状态的梯度
         grad_inputs = torch.mm(torch.cat((grad_ingate, grad_forgetgate, grad_cellgate, grad_outgate), 1), w_ih)
         grad_hx = torch.mm(torch.cat((grad_ingate, grad_forgetgate, grad_cellgate, grad_outgate), 1), w_hh)
         
-        # 计算偏置的梯度
         grad_b_ih = torch.cat((grad_ingate, grad_forgetgate, grad_cellgate, grad_outgate), 1).sum(0)
         grad_b_hh = torch.cat((grad_ingate, grad_forgetgate, grad_cellgate, grad_outgate), 1).sum(0)
         
-        # 计算上一个单元状态的梯度
         grad_cx = grad_cy * forgetgate
         
-        # print("时间步:", time_step) 打印的OK
-        
-        # 如果时间步等于1表示当前时间块的数据都存储完毕。
         if time_step == 1:
             grad_w_ih = torch.zeros_like(w_ih)
             grad_w_hh = torch.zeros_like(w_hh)
             
-            # 取stitt所需参数
             X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih, X_matrix_hh, Sigma_hh, Sigma_matrix_hh, Delta_matrix_hh = accumulator.deliver_sptt_parameter()
-            # input_cat, hx_cat, delta_cat = accumulator.get_concatenated_gradients()
             activation_input, activation_hx, delta = accumulator.get_concatenated_gradients()
             
-            # len是返回张量的第一个维度的长度，对应的就是batch_size行数。
-            # T: 表示存储数据的全部行数, t：表示每个块的实际长度, i表示当前块的索引号
-            # T = len(input_cat) 
-            # t = T // time_block_num 
-            # print("T // t", T // t)
             t = len(activation_input)
             i = chunk_block
-            # print("块索引: ", chunk_block) 打印的OK
+
             inv_Sigma_matrix_ih = torch.inverse(Sigma_matrix_ih)
             inv_Sigma_matrix_hh = torch.inverse(Sigma_matrix_hh)
             
@@ -404,11 +333,9 @@ class LSTMCellFunction(torch.autograd.Function):
                 scale_factor_right_hh = delta @ Delta_matrix_hh / t
                 scale_factor_left_hh = activation_hx @ X_matrix_hh / t
                     
-                # 使用预计算的系数提高效率
                 i_factor = i / (i + 1)
                 update_factor = 1 / (i + 1)
                     
-                # 更新X和Delta矩阵
                 X_ih_update = activation_input.t() @ scale_factor_right_ih @ inv_Sigma_matrix_ih
                 X_matrix_ih = i_factor * X_matrix_ih + update_factor * X_ih_update
                     
@@ -433,22 +360,15 @@ class LSTMCellFunction(torch.autograd.Function):
                 align_hh = Sigma_hh_signal_X * Sigma_hh_signal_Delta
                 Delta_matrix_hh = Delta_matrix_hh * align_hh.unsqueeze(0)
                     
-                # 批量计算Sigma更新
                 Sigma_ih_product = torch.sum(((delta @ Delta_matrix_ih) * (activation_input @ X_matrix_ih)) / ((i + 1) * t), dim=0)
                 Sigma_ih = i_factor * Sigma_ih + Sigma_ih_product      
                               
                 Sigma_hh_product = torch.sum(((delta @ Delta_matrix_hh) * (activation_hx @ X_matrix_hh)) / ((i + 1) * t), dim=0)
                 Sigma_hh = i_factor * Sigma_hh + Sigma_hh_product
-                
-                # XXX:
-                Sigma_ih[Sigma_ih == 0] = 1
-                Sigma_hh[Sigma_hh == 0] = 1
                     
-                # 在计算完成后、更新梯度前应用对数缩放
                 Sigma_matrix_ih = torch.diag(Sigma_ih)
                 Sigma_matrix_hh = torch.diag(Sigma_hh)
                     
-                # 更新逆矩阵
                 inv_Sigma_matrix_ih = torch.inverse(Sigma_matrix_ih)
                 inv_Sigma_matrix_hh = torch.inverse(Sigma_matrix_hh)
             
@@ -460,11 +380,6 @@ class LSTMCellFunction(torch.autograd.Function):
             time_backward = end_calculate_gradients - start_calculate_gradients
             
             global_param['time_for_batch'] += time_backward
-            
-            # if global_param['viz_spectrum_drift']:
-            #     if 'sigma_list' not in global_param:
-            #         global_param['sigma_list'] = []
-            #     global_param['sigma_list'].append(Sigma_hh.detach().cpu().numpy())
             
             accumulator.save_sptt_parameter(X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih, 
                                               X_matrix_hh, Sigma_hh, Sigma_matrix_hh, Delta_matrix_hh)

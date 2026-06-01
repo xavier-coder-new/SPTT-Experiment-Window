@@ -3,54 +3,24 @@ import torch.nn as nn
 import math
 from global_param import global_param
 import time
-from utils.GradientAccumulator_SRU_Hybrid import GradientAccumulatorSRU_Hybrid as GradientAccumulatorSRU
+from utils.GradientAccumulator_SRU import GradientAccumulatorSRU_Hybrid as GradientAccumulatorSRU
 from icecream import ic
 import numpy as np
 
 accumulator = GradientAccumulatorSRU()
 
-def chodral_subspace_drift(Q_matrix_old: torch.Tensor, Q_matrix_new: torch.Tensor) -> torch.Tensor:
-    """
-    [unit_dim, krank]
-    Q_matrix_old, Q_matrix_new: [d, k] with orthonormal columns.
-    Returns scalar drift (chordal distance): sqrt(k - ||Q_old^T Q_new||_F^2)
-    M: Q_old.T @ Q_new
-    """
-    k = Q_matrix_old.shape[1]
-    M = Q_matrix_old.transpose(0, 1) @ Q_matrix_new
-    frob_sq = torch.sum(M ** 2)
-    drift_sq = torch.clamp(k - frob_sq, min=0.0)
-    return torch.sqrt(drift_sq)
-
-
-"""Version 1"""
 def QR_matrix(X_matrix, target_shape):
     Q, R, diagonal_sign = qr_with_non_negative_diagonal(X_matrix)
-    # ic(Q.shape, target_shape)
     
-    # 使用预分配和高效索引
-    if Q.shape != target_shape:
-        # 进入这个会出现nan数值错误
-        assert Q.shape == target_shape, "not permit to change matrix shape"
-        result = torch.zeros(target_shape, device=X_matrix.device, dtype=X_matrix.dtype)
-        result[:min(Q.shape[0], target_shape[0]), :min(Q.shape[1], target_shape[1])] = \
-            Q[:min(Q.shape[0], target_shape[0]), :min(Q.shape[1], target_shape[1])]
-        return result, R, diagonal_sign
-    # ic(Q.shape, diagonal_sign.shape)
     return Q, R, diagonal_sign
     
 def qr_with_non_negative_diagonal(matrix):
-    # 进行QR分解
     Q, R = torch.linalg.qr(matrix)
     
-    # 获取 R 矩阵对角线元素的符号
     diagonal_sign = torch.sign(torch.diag(R))
     
-    # 避免对角线元素为零的情况
     diagonal_sign[diagonal_sign == 0] = 1
-    # ic(diagonal_sign)
-    
-    # 调整 Q 矩阵的列符号和Q = Q * diagonal_sign得到的结果一样。
+
     Q1 = Q * diagonal_sign.unsqueeze(0)
     
     R = diagonal_sign.unsqueeze(1) * R
@@ -68,7 +38,7 @@ class Model(nn.Module):
         self.krank = config.krank
         self.task_name = config.task_name
         self.time_block_num = config.time_block_num
-        # 如果是多变量预测多变量的问题，全连接层的输出尺寸应该是 特征维度 X 预测长度
+
         if self.task_name == 'long_term_forecast':
             self.output_size = config.pred_len
             self.feature_dim = config.feature_dim
@@ -101,18 +71,7 @@ class Model(nn.Module):
             raise ValueError("Task name not supported!")
 
     def forward(self, x, target=None, criterion=None, model_optim=None, inp=None, mask=None):
-        # final_hidden = self.sru(x, epoch_count, batch_idx)
         result = self.sru(x, target, criterion, model_optim, inp=inp, mask=mask)
-        # fc_out = self.fc(final_hidden)
-
-        # if self.task_name == 'long_term_forecast':
-        #     y = fc_out.view(-1, self.output_size, self.feature_dim)
-        # elif self.task_name == 'classification':
-        #     y = fc_out
-        # elif self.task_name == 'imputation':
-        #     y = fc_out.view(-1, self.output_size, self.feature_dim)
-        # elif self.task_name == 'anomaly_detection':
-        #     y = fc_out.view(-1, self.output_size, self.feature_dim)
 
         return result
 
@@ -205,9 +164,6 @@ class CustomSRU(nn.Module):
         self.Sigma_matrix_in = torch.diag(self.Sigma_in)
             
     def forward(self, x, targets=None, criterion=None, model_optim=None, inp=None, mask=None):
-        # accumulator.reset()
-        # global_param["flag"] = True
-        # global_param["compression_finished"] = False
         global_param["time_for_batch"] = 0.0
         
         if self.task_name == 'imputation':
@@ -230,19 +186,16 @@ class CustomSRU(nn.Module):
                 chunk_start = indices[i]
                 chunk_end = indices[i + 1]
                 chunk_block += 1
-                # 判断是否是最后一个chunk.
+
                 if i == self.time_block_num - 1:
                     is_last_chunk = True
                 else:
                     is_last_chunk = False
-                    
-                # 截断梯度流，但保持状态连续性
+
                 if chunk_start > 0:
-                    # 保留数值前向继续，但断开反向传播图,，这样确保每个时间块之间状态连续但梯度不连续。
                     hx.detach_()
                     cx.detach_()
-                
-                # 处理当前chunk的时间步
+
                 time_step = 0
                     
                 for i in range(chunk_start, chunk_end):
@@ -276,8 +229,6 @@ class CustomSRU(nn.Module):
                     outputs = fc_out
                     loss = criterion(outputs, targets.long().squeeze(-1))
                 elif self.task_name == 'anomaly_detection':
-                    # print("fc_out", fc_out.shape)
-                    # print("进来了进来了！！！！！！！！！！！！！！！！！")
                     y = fc_out.view(-1, self.output_size_anomaly, self.feature_dim)
                     f_dim = -1 if self.config.features == 'MS' else 0
                     outputs = y[:, :, f_dim:]
@@ -295,18 +246,15 @@ class CustomSRU(nn.Module):
                 
                 if not is_last_chunk:
                     model_optim.zero_grad()
-                    # 如果不是最后一个chunk进行反向传播更新梯度和参数
                     loss.backward()
                     model_optim.step()
                     
-            # 如果是最后一个last_chunk，直接返回loss，在主程序反向传播，更新梯度和权重 
             if self.task_name == 'classification':
                 return outputs, loss, sum_loss
             else:
                 return loss, sum_loss
             
         elif model_optim is None and criterion is not None:
-            # 进行验证
             time_step = 0
             accumulator.reset()
             for i in range(x.size(1)):
@@ -337,8 +285,6 @@ class CustomSRU(nn.Module):
                 loss = criterion(pred, true)
             elif self.task_name == 'classification':
                 outputs = fc_out
-                # pred = outputs.detach().cpu()
-                # loss = criterion(pred, targets.long().squeeze().cpu())
             elif self.task_name == 'anomaly_detection':
                 y = fc_out.view(-1, self.output_size_anomaly, self.feature_dim)
                 f_dim = -1 if self.config.features == 'MS' else 0
@@ -366,10 +312,7 @@ class CustomSRU(nn.Module):
                 return loss
             
         elif model_optim is None and criterion is None:
-            # 进行测试
             accumulator.reset()
-            # num_samples = x.size(0)
-            # seq_len = x.size(1)
             
             time_step = 0
             for i in range(x.size(1)):
@@ -566,13 +509,9 @@ class SRUCellFunction(torch.autograd.Function):
             X_matrix_in, Sigma_in, Sigma_matrix_in, Delta_matrix_in = accumulator.deliver_sptt_parameter()
             input_cat, delta_input_cat = accumulator.get_concatenated_gradients()
 
-            # T = input_cat.size(0)
             i = chunk_block
-            # t = max(t, 1)
             
-            # safer than inverse
             inv_Sigma_matrix_in = torch.inverse(Sigma_matrix_in)
-            # inv_Sigma_matrix_in = torch.linalg.pinv(Sigma_matrix_in)
             
             start_calculate_gradients = time.time()
             with torch.no_grad():
@@ -609,13 +548,9 @@ class SRUCellFunction(torch.autograd.Function):
                 
                 Sigma_in = i_factor * Sigma_in + Sigma_product
                 
-                # XXX：
-                Sigma_in[Sigma_in == 0] = 1
-                
                 Sigma_matrix_in = torch.diag(Sigma_in)
                 
                 inv_Sigma_matrix_in = torch.inverse(Sigma_matrix_in)
-                # inv_Sigma_matrix_in = torch.linalg.pinv(Sigma_matrix_in)
                 
             grad_w_in = (X_matrix_in @ Sigma_matrix_in @ Delta_matrix_in.t()).t()
             
@@ -632,11 +567,6 @@ class SRUCellFunction(torch.autograd.Function):
             
             end_calculate_gradients = time.time()
             global_param["time_for_batch"] = end_calculate_gradients - start_calculate_gradients
-            
-            if global_param.get("viz_spectrum_drift", False):
-                if "sigma_list" not in global_param:
-                    global_param["sigma_list"] = []
-                global_param["sigma_list"].append(Sigma_in.detach().cpu().numpy())
 
             accumulator.save_sptt_parameter(
                 X_matrix_in, Sigma_in, Sigma_matrix_in, Delta_matrix_in

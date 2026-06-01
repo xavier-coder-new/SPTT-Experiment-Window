@@ -2,11 +2,6 @@
 
 export CUDA_VISIBLE_DEVICES=0
 
-# 获取命令行参数
-# name=$1
-# 这样运行bash scripts_name.sh ETTh1, 这样ETTh1自动赋值给name变量了。
-# 
-
 model_name=BpttMinLSTM
 data_name=$1
 seed=$2
@@ -14,7 +9,6 @@ time_block_num=$3
 krank=$4
 learning_rate=$5
 inverse_model=$6
-# M: 多变量预测多变量， MS: 多变量预测单变量， S: 单变量预测单变量
 features=M
 train_epochs=50
 pred_len=0
@@ -24,11 +18,7 @@ anomaly_ratio=1
 
 root_path=./dataset/"$data_name"/
 
-
-# MSL 55, PSM 25, SWAP 25, SWD 38, SWAT 51
-
 if [[ "$data_name" == "MSL" ]]; then
-    # seq_len后面可加长一些。
     batch_size=128
     seq_len=100
     feature_dim=55
@@ -50,12 +40,8 @@ elif [[ "$data_name" == "SWAT" ]]; then
     feature_dim=51
 fi
 
-
 label=$seq_len'_'$pred_len
 
-# batch_size 对于ETTm 64太小了。
-# itr 实验次数
-# type3 余弦退火，type2：阶段衰减
 python -u run.py \
     --task_name anomaly_detection \
     --is_training 1 \
@@ -87,7 +73,4 @@ python -u run.py \
     --anomaly_ratio "$anomaly_ratio" \
     --estimation_method None \
     --inverse_model $inverse_model \
-    # --record \
-    # --viz_batch_level
-
 

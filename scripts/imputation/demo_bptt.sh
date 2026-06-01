@@ -95,6 +95,3 @@ python -u run.py \
     --estimation_method None \
     --mask_rate "$mask_rate" \
     --inverse_model $inverse_model \
-    # --viz_spectrum_drift \
-    # --record \
-    # --viz_batch_level

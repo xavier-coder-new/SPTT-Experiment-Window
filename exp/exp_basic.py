@@ -10,7 +10,7 @@ class Exp_Basic(object):
             'BpttLSTM': BpttLSTM,
             'BpttGRU': BpttGRU,
             'SpttLSTM': SpttLSTM_Window,
-            'SpttGRUNew': SpttGRU_Window,
+            'SpttGRU': SpttGRU_Window,
             'SpttMinLSTM': SpttMinLSTM_Window,
             'SpttMinGRU': SpttMinGRU_Window,
             'SpttSRU': SpttSRU_Window,
@@ -24,8 +24,6 @@ class Exp_Basic(object):
 
     def _build_model(self):
         raise NotImplementedError
-        return None
-
     def _acquire_device(self):
         if self.args.use_gpu and self.args.gpu_type == 'cuda':
             os.environ["CUDA_VISIBLE_DEVICES"] = str(

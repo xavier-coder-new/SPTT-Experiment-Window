@@ -9,14 +9,10 @@ time_block_num=$3
 krank=$4
 learning_rate=$5
 inverse_model=$6
-
 train_epochs=300
 patience=25
 root_path=./dataset/"$data_name"/
-# 特征维度，就是通道数，几通道代表几特征，每个时间步的输入维度。
-# feature_dim=3
-# 这个pred_len对于分类任务而言代表的类别数量。
-# num_classes=4
+
 if [[ "$data_name" == "SelfRegulationSCP1" ]]; then
   train_epochs=300
   patience=30
@@ -45,13 +41,6 @@ elif [[ "$data_name" == "FaceDetection" ]]; then
   feature_dim=144
   num_classes=2
   seq_len=62
-elif [[ "$data_name" == "Handwriting" ]]; then
-  train_epochs=300
-  patience=30
-  batch_size=16
-  feature_dim=3
-  num_classes=26
-  seq_len=152
 elif [[ "$data_name" == "Heartbeat" ]]; then
   train_epochs=300
   patience=30
@@ -60,9 +49,6 @@ elif [[ "$data_name" == "Heartbeat" ]]; then
   num_classes=2
   seq_len=405
 elif [[ "$data_name" == "JapaneseVowels" ]]; then
-  # 太垃圾了，不用。
-  # train_epochs=300
-  # patience=30
   train_epochs=800
   patience=100
   batch_size=16
@@ -70,8 +56,6 @@ elif [[ "$data_name" == "JapaneseVowels" ]]; then
   num_classes=9
   seq_len=29
 elif [[ "$data_name" == "PEMS-SF" ]]; then
-  # train_epochs=300
-  # patience=30
   train_epochs=800
   patience=100
   batch_size=16
@@ -85,12 +69,6 @@ elif [[ "$data_name" == "SpokenArabicDigits" ]]; then
   feature_dim=13
   num_classes=10
   seq_len=93
-elif [[ "$data_name" == "UWaveGestureLibrary" ]]; then
-  # 太垃圾了，不用
-  batch_size=16
-  feature_dim=3
-  num_classes=8
-  seq_len=315
 fi
 label=$feature_dim'_'$num_classes'_'$seq_len
 

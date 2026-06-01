@@ -2,10 +2,6 @@
 
 export CUDA_VISIBLE_DEVICES=0
 
-# SpttLSTM
-# StittLSTM_Hut
-# StittLSTM_Dropout
-#./scripts/classification/Sptt/SpttLSTM.sh
 model_name=BpttGRU
 data_name=PEMS-SF
 seed=2020
@@ -16,12 +12,8 @@ inverse_model=align
 train_epochs=300
 patience=25
 root_path=./dataset/"$data_name"/
-# 特征维度，就是通道数，几通道代表几特征，每个时间步的输入维度。
-# feature_dim=3
-# 这个pred_len对于分类任务而言代表的类别数量。
-# num_classes=4
+
 if [[ "$data_name" == "SelfRegulationSCP1" ]]; then
-  # 最后一个跑
   train_epochs=300
   patience=30
   batch_size=16
@@ -43,20 +35,12 @@ elif [[ "$data_name" == "SelfRegulationSCP2" ]]; then
   num_classes=2
   seq_len=1152
 elif [[ "$data_name" == "FaceDetection" ]]; then
-  # train_epochs=80
   train_epochs=300
   patience=30
   batch_size=32
   feature_dim=144
   num_classes=2
   seq_len=62
-elif [[ "$data_name" == "Handwriting" ]]; then
-  train_epochs=300
-  patience=30
-  batch_size=16
-  feature_dim=3
-  num_classes=26
-  seq_len=152
 elif [[ "$data_name" == "Heartbeat" ]]; then
   train_epochs=300
   patience=30
@@ -66,8 +50,6 @@ elif [[ "$data_name" == "Heartbeat" ]]; then
   seq_len=405
 elif [[ "$data_name" == "JapaneseVowels" ]]; then
   train_epochs=800
-  # 倒数第二个跑
-  # train_epochs=300
   patience=130
   batch_size=16
   feature_dim=12
@@ -87,13 +69,6 @@ elif [[ "$data_name" == "SpokenArabicDigits" ]]; then
   feature_dim=13
   num_classes=10
   seq_len=93
-elif [[ "$data_name" == "UWaveGestureLibrary" ]]; then
-  train_epochs=300
-  patience=30
-  batch_size=16
-  feature_dim=3
-  num_classes=8
-  seq_len=315
 fi
 label=$feature_dim'_'$num_classes'_'$seq_len
 
@@ -124,7 +99,3 @@ python -u run.py \
   --num_class "$num_classes" \
   --des 'Exp' \
   --inverse_model $inverse_model \
-  # --viz_spectrum_drift \
-  # --record \
-  # --viz_batch_level
-

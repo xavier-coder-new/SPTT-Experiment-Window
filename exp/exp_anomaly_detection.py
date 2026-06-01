@@ -18,7 +18,6 @@ import logging
 import torch.optim.lr_scheduler as lr_scheduler
 from global_param import global_param
 import pandas as pd
-from utils.visualization_spectrum_drift import plot_spectrum_drift
 from icecream import ic
 
 warnings.filterwarnings('ignore')
@@ -40,16 +39,12 @@ def setup_logger(model_name, dataset_name, seed, learning_rate, krank, time_bloc
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
         
-    
-    # 创建logger
     logger = logging.getLogger("anomaly_ratio")
     logger.setLevel(logging.INFO)
     
-    # 清除之前的处理器，防止重复
     if logger.handlers:
         logger.handlers.clear()
     
-    # 创建文件处理器，并将日志文件保存到指定目录下
     timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
     file_handler = logging.FileHandler(
         os.path.join(
@@ -63,8 +58,7 @@ def setup_logger(model_name, dataset_name, seed, learning_rate, krank, time_bloc
     
     formatter = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(formatter)
-    
-    # 配置自动刷新
+
     original_emit = file_handler.emit
     def new_emit(record):
         result = original_emit(record)
@@ -184,16 +178,11 @@ class Exp_Anomaly_Detection(Exp_Basic):
                 batch_x = batch_x.float().to(self.device)
 
                 loss, sum_loss = self.model(batch_x, batch_y, criterion, model_optim)
-
-                # f_dim = -1 if self.args.features == 'MS' else 0
-                # outputs = outputs[:, :, f_dim:]
                 
                 avg_loss = sum_loss / self.args.time_block_num
                 
-                # loss = criterion(outputs, batch_x)
                 train_loss.append(avg_loss)
-                # train_loss_per_iter.append(loss.item())
-
+                
                 if (i + 1) % 100 == 0:
                     print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
                     speed = (time.time() - time_now) / iter_count
@@ -203,36 +192,6 @@ class Exp_Anomaly_Detection(Exp_Basic):
                     time_now = time.time()
 
                 loss.backward()
-                
-                if self.args.viz_spectrum_drift and self.args.model in {'BpttLSTM', 'BpttGRU'}:
-                    grad_w_hh = None
-                    for name, param in self.model.named_parameters():
-                        if 'w_hh' in name and param.grad is not None:
-                            grad_w_hh = param.grad.detach().float()
-                            break
-                    assert grad_w_hh is not None, "grad_w_hh is None"
-                    if grad_w_hh is not None:    
-                        if 'sigma_list' not in global_param:
-                            ic("model name: ", self.args.model, "allow to record spectrum drift")
-                            global_param['sigma_list'] = []
-                        _, Sigma, _ = torch.linalg.svd(grad_w_hh, full_matrices=False)
-                        truncated_sigma = Sigma[:self.args.krank]
-                        global_param['sigma_list'].append(truncated_sigma.cpu().numpy())
-                        
-                if self.args.viz_spectrum_drift and self.args.model in {'BpttMinLSTM', 'BpttMinGRU'}:
-                    grad_w_ih = None
-                    for name, param in self.model.named_parameters():
-                        if 'w_ih' in name and param.grad is not None:
-                            grad_w_ih = param.grad.detach().float()
-                            break
-                    assert grad_w_ih is not None, "grad_w_ih is None"
-                    if grad_w_ih is not None:    
-                        if 'sigma_list' not in global_param:
-                            ic("model name: ", self.args.model, "allow to record spectrum drift")
-                            global_param['sigma_list'] = []
-                        _, Sigma, _ = torch.linalg.svd(grad_w_ih, full_matrices=False)
-                        truncated_sigma = Sigma[:self.args.krank]
-                        global_param['sigma_list'].append(truncated_sigma.cpu().numpy())
                 
                 time_for_batch = global_param['time_for_batch']
                 if time_for_batch > max_time_batch:
@@ -244,32 +203,19 @@ class Exp_Anomaly_Detection(Exp_Basic):
                 model_optim.step()
                 
                 logger.info(f"Epoch: {epoch + 1} Batch: {iter_count} Loss: {loss.item()} Time_batch: {time_for_batch:.5f}")
-
-
-            # logger.info(f"Epoch: {epoch + 1} cost time: {time.time() - epoch_time}")
             
             train_loss_data = pd.DataFrame({
                 'train_loss': train_loss
             })
             
-            # 追加写入csv文件
             if os.path.exists(train_loss_csv_file):
-                # a:表示以追加模式打开文件，如果文件存在，新的数据会被追加到文件末尾。
                 train_loss_data.to_csv(train_loss_csv_file, mode='a', header=False, index=False)
             else:
-                # w:表示以写入模式打开文件，如果文件不存在，则会创建文件，如果文件存在，则会覆盖原有文件。
                 train_loss_data.to_csv(train_loss_csv_file, mode='w', header=True, index=False)
             
-            # 写完之后再求均值清除
             train_loss = np.average(train_loss)
             
-            # 此处是存均值
-            # train_loss_per_iter.append(train_loss)
             vali_loss = self.vali(vali_data, vali_loader, criterion, vali_loss_csv_file)
-            # vali_loss_per_iter.append(vali_loss)
-
-            # print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
-            #     epoch + 1, train_steps, train_loss, vali_loss, test_loss))
 
             if self.args.lradj == 'type1':
                 adjust_learning_rate(model_optim, epoch + 1, self.args)
@@ -303,17 +249,6 @@ class Exp_Anomaly_Detection(Exp_Basic):
                 vali_loss_df = pd.read_csv(vali_loss_csv_file)
                 visual_loss(vali_loss_df['vali_loss'].tolist(), 'Validation Loss', os.path.join(vali_loss_csv_dir, 'vali_loss.svg'))
                 
-                if self.args.viz_spectrum_drift:
-                    ic("visualize spectrum drift")
-                    viz_spectrum_drift_path = os.path.join('./viz_spectrum_drift', self.args.task_name, self.args.model, 
-                                                           self.args.data_name, self.args.inverse_model, str(self.args.seed), 
-                                                           f"Patience_{self.args.patience}_Epoch_{self.args.train_epochs}", 
-                                                           f"Time_block_{self.args.time_block_num}_Krank_{self.args.krank}", 
-                                                           str(timestamp_loss_csv))
-                    if not os.path.exists(viz_spectrum_drift_path):
-                        os.makedirs(viz_spectrum_drift_path)
-                    plot_spectrum_drift(viz_spectrum_drift_path, global_param['sigma_list'], train_steps, self.args.patience, self.args.model)
-                
                 avg_time_epoch /= epoch_count
                 logger.info(f"Early stopping Epoch: {epoch + 1} Steps: {train_steps} Average_time_epoch {avg_time_epoch:.5f} Min_time_epoch: {min_time_epoch:.5f} Max_time_epoch: {max_time_epoch:.5f}")
                 break
@@ -334,17 +269,6 @@ class Exp_Anomaly_Detection(Exp_Basic):
 
                 loss = self.model(batch_x, criterion=criterion)
                 
-                # outputs = self.model(batch_x)
-
-                # f_dim = -1 if self.args.features == 'MS' else 0
-                
-                # outputs = outputs[:, :, f_dim:]
-                
-                # pred = outputs.detach().cpu()
-                # true = batch_x.detach().cpu()
-
-                # loss = criterion(pred, true)
-                
                 total_loss.append(loss.item())
         
         vali_loss_data = pd.DataFrame({
@@ -361,12 +285,10 @@ class Exp_Anomaly_Detection(Exp_Basic):
         return total_loss
 
     def test(self, setting, test=0):
-        # 在异常检测任务中，train_loader 在测试阶段使用，是为了统计正常样本的分布特征，用来估计"异常能量阈值"
         test_data, test_loader = self._get_data(flag='test')
         train_data, train_loader = self._get_data(flag='train')
         if test:
             print('loading model')
-            # 构建与训练时一致的模型路径
             model_path = os.path.join(self.args.checkpoints, self.args.task_name, self.args.model, 
                                      self.args.data_name, str(self.args.seed), str(self.args.anomaly_ratio), 
                                      self.args.inverse_model, setting, 'checkpoint.pth')
@@ -377,20 +299,16 @@ class Exp_Anomaly_Detection(Exp_Basic):
         self.model.eval()
         self.anomaly_criterion = nn.MSELoss(reduce=False)
 
-        # 基于重构误差的异常检测流程。
-        # (1) stastic on the train set
         with torch.no_grad():
             for i, (batch_x, batch_y) in enumerate(train_loader):
                 batch_x = batch_x.float().to(self.device)
                 # reconstruction
                 outputs = self.model(batch_x)
-                # criterion 对特征维度求平均，变成每个样本一个分数。
+                # criterion
                 score = torch.mean(self.anomaly_criterion(batch_x, outputs), dim=-1)
                 score = score.detach().cpu().numpy()
-                # 将这个batch的所有样本分数加入列表。
                 attens_energy.append(score)
 
-        # 将所有batch的分数拼接起来，变成一个一维数组。
         attens_energy = np.concatenate(attens_energy, axis=0).reshape(-1)
         print("attens_energy shape: ", attens_energy.shape)
         train_energy = np.array(attens_energy)
@@ -408,32 +326,20 @@ class Exp_Anomaly_Detection(Exp_Basic):
             attens_energy.append(score)
             
             test_labels.append(batch_y)
-        
-        # np.concatenate 是 NumPy 提供的一个函数，用于将多个数组沿指定的轴（axis）进行连接。
-        # .reshape(-1) 是 NumPy 中用于调整数组形状的方法。
-        # 参数 -1 表示自动计算该维度的大小，使得数组的所有元素保持不变。
-        # 结果是一个一维数组（即展平后的数组）。
+    
         attens_energy = np.concatenate(attens_energy, axis=0).reshape(-1)
         test_energy = np.array(attens_energy)
         
-        # 把训练集 + 测试集的重构误差放在一起看，估计一个合理的分位点作为阈值
         combined_energy = np.concatenate([train_energy, test_energy], axis=0)
         
-        # self.args.anomaly_ratio是假设的异常数据占比。
-        # np.percentile 是 NumPy 提供的一个函数，用于计算数组中某个百分位数的值。
-        # 百分位数（Percentile）是统计学中的一个概念，表示在一组数据中，有多少比例的数据小于或等于该值。
-        # np.percentile 使用线性插值来计算百分位数的具体值
         threshold = np.percentile(combined_energy, 100 - self.args.anomaly_ratio)
         print("Threshold :", threshold)
 
-        # (3) evaluation on the test set
-        # 将每个测试样本的重构误差与阈值比较， 大于阈值 ➝ 认为是异常（记为 1），否则为正常（记为 0）。
         pred = (test_energy > threshold).astype(int)
         
         test_labels = np.concatenate(test_labels, axis=0).reshape(-1)
         test_labels = np.array(test_labels)
         
-        # gt: ground truth 表示真实标签
         gt = test_labels.astype(int)
 
         print("pred:   ", pred.shape)
@@ -457,12 +363,4 @@ class Exp_Anomaly_Detection(Exp_Basic):
             accuracy, precision,
             recall, f_score))
         
-        # f = open("result_anomaly_detection.txt", 'a')
-        # f.write(setting + "  \n")
-        # f.write("Accuracy : {:0.4f}, Precision : {:0.4f}, Recall : {:0.4f}, F-score : {:0.4f} ".format(
-        #     accuracy, precision,
-        #     recall, f_score))
-        # f.write('\n')
-        # f.write('\n')
-        # f.close()
         return

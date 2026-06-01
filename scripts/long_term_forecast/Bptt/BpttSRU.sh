@@ -2,16 +2,9 @@
 
 export CUDA_VISIBLE_DEVICES=0
 
-# 获取命令行参数
-# name=$1
-# 这样运行bash scripts_name.sh ETTh1, 这样ETTh1自动赋值给name变量了。
-# 
-
 model_name=BpttSRU
 data_name=$1
 seed=$2
-echo "当前数据集: $data_name"
-# M: 多变量预测多变量， MS: 多变量预测单变量， S: 单变量预测单变量
 features=M
 train_epochs=300
 patience=10
@@ -25,17 +18,12 @@ if [[ "$data_name" = "ETTh1" || "$data_name" = "ETTh2" || "$data_name" = "ETTm1"
     root_path=./dataset/ETT-small/
     feature_dim=7
     if [[ "$data_name" = "ETTh1" || "$data_name" = "ETTh2" ]]; then
-        echo "使用ETTh数据集"
         batch_size=64
         seq_len=384
         pred_len=96
         label=384_96
     elif [[ "$data_name" = "ETTm1" || "$data_name" = "ETTm2" ]]; then
-        echo "使用ETTm数据集"
         batch_size=256
-        # seq_len=192
-        # pred_len=96
-        # label=192_96
         seq_len=480
         pred_len=192
         label=480_192
@@ -44,28 +32,24 @@ else
     data_dict=custom
     root_path="./dataset/$data_name/"
     if [[ "$data_name" = "traffic" ]]; then
-        echo "使用traffic数据集"
         feature_dim=862
         batch_size=64
         seq_len=480
         pred_len=192
         label=480_192
     elif [[ "$data_name" = "electricity" ]]; then
-        echo "使用electricity数据集"
         feature_dim=321
         batch_size=128
         seq_len=672
         pred_len=384
         label=672_384
     elif [[ "$data_name" = "weather" ]]; then
-        echo "使用weather数据集"
         feature_dim=21
         batch_size=128
         seq_len=672
         pred_len=384
         label=672_384
     elif [[ "$data_name" = "illness" ]]; then
-        echo "使用illness数据集"
         patience=30
         feature_dim=7
         batch_size=32
@@ -73,7 +57,6 @@ else
         pred_len=96
         label=96_96
     elif [[ "$data_name" = "exchange_rate" ]]; then
-        echo "使用exchange_rate数据集"
         feature_dim=8
         batch_size=64
         seq_len=192
@@ -82,9 +65,6 @@ else
     fi
 fi
 
-# batch_size 对于ETTm 64太小了。
-# itr 实验次数
-# type3 余弦退火，type2：阶段衰减
 python -u run.py \
     --task_name long_term_forecast \
     --is_training 1 \

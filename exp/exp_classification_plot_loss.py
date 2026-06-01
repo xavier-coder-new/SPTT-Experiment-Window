@@ -15,7 +15,6 @@ from global_param import global_param
 import csv
 import pandas as pd
 from icecream import ic
-from utils.visualization_spectrum_drift import plot_spectrum_drift
 
 warnings.filterwarnings('ignore')
 
@@ -35,14 +34,12 @@ def setup_logger(model_name, dataset_name, seed, learning_rate, krank, time_bloc
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     
-    # 创建logger
     logger = logging.getLogger("classification")
     logger.setLevel(logging.INFO)
-    # 清除之前的处理器，防止重复
+
     if logger.handlers:
         logger.handlers.clear()
     
-    # 创建文件处理器，并将日志文件保存到指定目录下
     timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
     file_handler = logging.FileHandler(
         os.path.join(
@@ -65,12 +62,10 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
     def __init__(self, args):
         super(Exp_Classification_Plot_Loss, self).__init__(args)
 
-    # Exp_Basic初始化的时候就会建造模型
     def _build_model(self):
         # model input depends on data
         train_data, train_loader = self._get_data(flag='TRAIN')
         test_data, test_loader = self._get_data(flag='TEST')
-        # max(a, b)返回a,b中的最大值。
         self.args.seq_len = max(train_data.max_seq_len, test_data.max_seq_len)
         self.args.pred_len = 0
         self.args.enc_in = train_data.feature_df.shape[1]
@@ -87,8 +82,6 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
         return data_set, data_loader
 
     def _select_optimizer(self):
-        # model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
-        # 对于batch_size较小的情况，RAdam可能更合适
         model_optim = optim.RAdam(self.model.parameters(), lr=self.args.learning_rate)
         return model_optim
 
@@ -99,7 +92,6 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
     def train(self, setting):
         train_data, train_loader = self._get_data(flag='TRAIN')
         vali_data, vali_loader = self._get_data(flag='TEST')
-        # test_data, test_loader = self._get_data(flag='TEST')
         
         timestamp_loss_csv = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
         self.timestamp_loss_csv = timestamp_loss_csv
@@ -175,7 +167,6 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
                 iter_count += 1
                 model_optim.zero_grad()
                 if self.is_first_train:
-                    # 对于EthanolConcentration torch.Size([64, 1751, 3]) torch.Size([64, 1751])
                     print(f"batch_x shape:{batch_x.shape}, padding_mask.shape:{padding_mask.shape}")
                     self.is_first_train = False
                 
@@ -183,15 +174,11 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
                 padding_mask = padding_mask.float().to(self.device)
                 label = label.to(self.device)
 
-                # outputs = self.model(batch_x, padding_mask, None, None)
-                # outputs = self.model(batch_x)
                 outputs, loss, sum_loss = self.model(batch_x, label, criterion, model_optim)
                 
                 avg_loss = sum_loss / self.args.time_block_num
                 
-                # loss = criterion(outputs, label.long().squeeze(-1))
                 train_loss.append(avg_loss)
-                # train_loss_per_iter.append(avg_loss)
                 
                 global_iter = epoch * train_steps + iter_count
 
@@ -206,11 +193,8 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
                 trues_train.append(label)
 
                 if (i + 1) % 100 == 0:
-                    # \t是制表符，用于在打印时缩进，让输出更加整齐
                     print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
-                    # 计算每次迭代的平均耗时。
                     speed = (time.time() - time_now) / iter_count
-                    # 估算剩余训练时间
                     left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
                     print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
                     iter_count = 0
@@ -224,14 +208,11 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
                 if time_for_batch < min_time_batch:
                     min_time_batch = time_for_batch
                 total_time += time_for_batch
-                
-                # 梯度裁剪
-                # nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=4.0)
+
                 model_optim.step()
                 logger.info(f"Epoch: {epoch + 1} Batch: {iter_count} Loss: {loss.item()} Time_batch: {time_for_batch:.5f}")
                 
             train_loss = np.average(train_loss)
-            # train_loss_per_iter.append(train_loss)
             
             preds_train = torch.cat(preds_train, 0)
             trues_train = torch.cat(trues_train, 0)
@@ -285,15 +266,8 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
                 best_vali_loss = vali_loss
                 best_epoch = epoch + 1
             
-            # if self.args.data_name == 'SelfRegulationSCP1' or self.args.data_name == 'FaceDetection':
-            # if self.args.data_name == 'SelfRegulationSCP1':
-            # # early_stopping(vali_loss, self.model, path)
-            #     early_stopping(-val_accuracy, self.model, path)
-            # else:
-            #     # HACK
             early_stopping(vali_loss, self.model, path)
-                # early_stopping(-val_accuracy, self.model, path)
-            # early_stopping(-val_accuracy, self.model, path)
+
             if early_stopping.early_stop:
                 print("Early stopping")
                 
@@ -313,7 +287,6 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
         if stopped_epoch is None:
             stopped_epoch = epoch_count
 
-        # 如果训练过程中没有刷新 best_epoch，做一个保险处理
         if best_epoch == 0:
             best_epoch = epoch_count
 
@@ -321,10 +294,6 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
         vali_loss_full_df = pd.DataFrame(vali_loss_records)
         epoch_loss_full_df = pd.DataFrame(epoch_loss_records)
 
-        # 标记哪些 epoch 用于最终绘图
-        # 这里保留 epoch <= best_epoch
-        # 因此，中间短暂没有 improvement 的 epoch 不会被删除
-        # 只删除最后 best_epoch 之后的 early-stopping tail
         train_loss_full_df["used_for_plot"] = (
             train_loss_full_df["epoch"] <= best_epoch
         ).astype(int)
@@ -362,7 +331,6 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
 
         os.makedirs(loss_export_dir, exist_ok=True)
 
-        # 完整 loss：包含最终 early-stopping tail，便于之后核查实验过程
         train_loss_full_df.to_csv(
             os.path.join(loss_export_dir, f"train_loss_full_seed_{self.args.seed}.csv"),
             index=False
@@ -378,7 +346,6 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
             index=False
         )
 
-        # 绘图 loss：去掉最终 early-stopping tail
         train_loss_plot_df.to_csv(
             os.path.join(loss_export_dir, f"train_loss_plot_seed_{self.args.seed}.csv"),
             index=False
@@ -394,7 +361,6 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
             index=False
         )
 
-        # 顺手生成单模型 loss 图
         visual_loss(
             train_loss_plot_df["train_loss"].tolist(),
             "Train Loss",
@@ -411,7 +377,7 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
             f"Loss exported. Best epoch: {best_epoch}, stopped epoch: {stopped_epoch}. "
             f"Only epochs after the final best epoch are excluded from plot files."
         )
-        # 先在验证集上验证，然后在训练循环结束后，添加测试代码来评估模型在测试集上的性能。
+
         best_model_path = path + '/' + 'checkpoint.pth'
         self.model.load_state_dict(torch.load(best_model_path))
 
@@ -434,8 +400,6 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
 
                 pred = outputs.detach().cpu()
                 
-                # # label.long().squeeze().cpu(): 确保label是整数，并去除多余维度，移动到CPU。
-                # loss = criterion(pred, label.long().squeeze().cpu())
                 processed_label = label.long().squeeze(-1).cpu()
                 
                 loss = criterion(pred, processed_label)
@@ -446,16 +410,11 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
         
         total_loss_avg = np.average(total_loss)
 
-        # preds和trues是两个列表，分别存储多个batch的结果
-        # torch.cat(preds, 0)沿着batch维度拼接，将所有batch的结果连接起来，得到完整的预测值和真实标签。
         preds = torch.cat(preds, 0)
         trues = torch.cat(trues, 0)
         probs = torch.nn.functional.softmax(preds)  # (total_samples, num_classes) est. prob. for each class and sample
-        # torch.argmax(probs, dim=1) 找到每个样本预测概率最高的类别索引。
         predictions = torch.argmax(probs, dim=1).cpu().numpy()  # (total_samples,) int class index for each sample
-        # 展平 trues 并转换为 NumPy
         trues = trues.flatten().cpu().numpy()
-        # 
         accuracy = cal_accuracy(predictions, trues)
 
         self.model.train()
@@ -465,21 +424,11 @@ class Exp_Classification_Plot_Loss(Exp_Basic):
         test_data, test_loader = self._get_data(flag='TEST')
         if test:
             print('loading model')
-            # self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
-            # 对历史版本的时间序列预测的加载需要修改下路径
-            # load_path = os.path.join('./checkpoints/', long_term_forecast, setting)
             load_path = os.path.join(self.args.checkpoints, self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), self.args.inverse_model, setting)
             self.model.load_state_dict(torch.load(os.path.join(load_path, 'checkpoint.pth')))
 
         preds = []
         trues = []
-        # folder_path = './test_results/' + setting + '/'
-        
-        # timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())    
-        # folder_path = os.path.join('./test_results', self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), str(timestamp))        
-        
-        # if not os.path.exists(folder_path):
-        #     os.makedirs(folder_path)
 
         self.model.eval()
         with torch.no_grad():

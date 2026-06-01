@@ -6,16 +6,6 @@ global_param = {
     'compression_finished': False,
     'time_block_size': 0.0,
     'total_time_block_size': 0.0,
-    # 用于Dropout估计
-    'trials': 0,
-    'dropout_x': 0.0,
-    'dropout_d': 0.0,
-    # 用于Hutchinson估计
-    'hutchinson_size': 0,
-    # 用于随机采样估计
-    'random_size': 0,
     'chunk_index': 0,
-    'mid_epoch': 5,
-    'last_epoch': 6,
-    'viz_batch_level': False,
+
 }

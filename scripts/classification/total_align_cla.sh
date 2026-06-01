@@ -1,25 +1,14 @@
 #!/usr/bin/bash
 export CUDA_VISIBLE_DEVICES=0
 seeds=(2021 2022)
-# seeds=(2023)
-# data_names=("SelfRegulationSCP1" "SelfRegulationSCP2" "FaceDetection" "Handwriting" "Heartbeat")
-# data_names=("PEMS-SF")
 data_names=("FaceDetection")
-# data_names=("JapaneseVowels")
-# data_names=("SelfRegulationSCP1" "FaceDetection" "PEMS-SF")
 time_block_nums=(4)
 kranks=(6)
-# kranks=6
-# learning_rates=0.0001 # 只针对JapaneseVowels和SpokenArabicDigits数据集 
 learning_rates=0.001
 inverse_model=align
 
 for seed in "${seeds[@]}"; do
     for data_name in "${data_names[@]}"; do
-        # if [[ "$data_name" = "EthanolConcentration" && "$seed" = "2023" ]]; then
-        #     echo "跳过 $data_name, seed=$seed"
-        #     continue
-        # fi
         for time_block_num in "${time_block_nums[@]}"; do
             for krank in "${kranks[@]}"; do
                 for learning_rate in "${learning_rates[@]}"; do
@@ -41,25 +30,21 @@ for seed in "${seeds[@]}"; do
                         "$learning_rate"
                         "$inverse_model"
                     )
-                
-                    if [[ "$inverse_model" = "align" ]]; then
-                        echo "执行模式: $inverse_model"
-                        ./scripts/classification/Bptt/BpttLSTM.sh "${args[@]}"
-                        ./scripts/classification/Sptt/SpttLSTM.sh "${args[@]}"
-                        # ./scripts/classification/Sptt/SpttLSTM_T.sh "${args[@]}"
+                    ./scripts/classification/Bptt/BpttLSTM.sh "${args[@]}"
+                    ./scripts/classification/Sptt/SpttLSTM.sh "${args[@]}"
+                    # ./scripts/classification/Sptt/SpttLSTM_T.sh "${args[@]}"
 
-                        # ./scripts/classification/Bptt/BpttSRU.sh "${args[@]}"
-                        # ./scripts/classification/Sptt/SpttSRU.sh "${args[@]}"
-                        # ./scripts/classification/Sptt/SpttSRU_T.sh "${args[@]}"
+                    # ./scripts/classification/Bptt/BpttSRU.sh "${args[@]}"
+                    # ./scripts/classification/Sptt/SpttSRU.sh "${args[@]}"
+                    # ./scripts/classification/Sptt/SpttSRU_T.sh "${args[@]}"
 
-                        # ./scripts/classification/Bptt/BpttMinGRU.sh "${args[@]}"
-                        # ./scripts/classification/Sptt/SpttMinGRU.sh "${args[@]}"
-                        # ./scripts/classification/Sptt/SpttMinGRU_T.sh "${args[@]}"
+                    # ./scripts/classification/Bptt/BpttMinGRU.sh "${args[@]}"
+                    # ./scripts/classification/Sptt/SpttMinGRU.sh "${args[@]}"
+                    # ./scripts/classification/Sptt/SpttMinGRU_T.sh "${args[@]}"
 
-                        # ./scripts/classification/Sptt/SpttGRU.sh "${args[@]}"
-                        # ./scripts/classification/Bptt/BpttGRU.sh "${args[@]}"
-                        # ./scripts/classification/Sptt/SpttGRU_T.sh "${args[@]}"
-                    fi
+                    # ./scripts/classification/Sptt/SpttGRU.sh "${args[@]}"
+                    # ./scripts/classification/Bptt/BpttGRU.sh "${args[@]}"
+                    # ./scripts/classification/Sptt/SpttGRU_T.sh "${args[@]}"
                 done
             done
         done
@@ -71,4 +56,4 @@ for seed in "${seeds[@]}"; do
     done
     sleep 30
 done
-echo "全部任务运行结束"
+echo "All jobs finished"

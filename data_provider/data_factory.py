@@ -23,8 +23,7 @@ def data_provider(args, flag):
     timeenc = 0 if args.embed != 'timeF' else 1
 
     shuffle_flag = False if (flag == 'test' or flag == 'TEST') else True
-    # 这个如果改成True对于illness数据集会出现nan，本身数据量就很少。
-    # HACK:
+
     drop_last = True
     batch_size = args.batch_size
     freq = args.freq
@@ -78,7 +77,6 @@ def data_provider(args, flag):
             seasonal_patterns=args.seasonal_patterns
         )
         if args.data_name == 'illness':
-            print("使用illness数据集....")
             drop_last = False
         print(flag, len(data_set))
         data_loader = DataLoader(

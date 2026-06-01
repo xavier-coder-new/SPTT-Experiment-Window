@@ -1,23 +1,15 @@
 #!/usr/bin/bash
 export CUDA_VISIBLE_DEVICES=0
 seeds=(2020 2021 2022)
-# task_name=("long_term_forecast" "classification" "anomaly_detection" "imputation")
-# task_name=("long_term_forecast")
-task_name=("imputation" "anomaly_detection")
-# data_names=("ETTh1" "ETTh2" "ETTm1" "ETTm2" "traffic" "electricity" "exchange_rate" "weather")
-# data_names=("illness")
+task_name=("long_term_forecast")
+data_names=("ETTh1" "ETTh2" "ETTm1" "ETTm2" "traffic" "electricity" "exchange_rate" "weather")
 time_block_nums=(8)
-# learning_rate=0.0001 # 只针对illness数据集
-# learning_rate=0.001
 inverse_model=align
 for task in "${task_name[@]}"; do
     if [[ "$task" = "long_term_forecast" ]]; then
-        echo "当前任务: $task"
-
         data_names=("ETTm2" "traffic")
         kranks=(7)
         learning_rate=0.001
-
         for data in "${data_names[@]}"; do
             for seed in "${seeds[@]}"; do
                 for time_block_num in "${time_block_nums[@]}"; do
@@ -41,7 +33,7 @@ for task in "${task_name[@]}"; do
                             "$inverse_model"
                         )
                         
-                        echo "执行模式: $inverse_model"
+                        echo "Mode: $inverse_model"
                         # ./scripts/long_term_forecast/Sptt/SpttGRU.sh "${args[@]}"
                         # ./scripts/long_term_forecast/Bptt/BpttGRU.sh "${args[@]}"
 
@@ -66,11 +58,10 @@ for task in "${task_name[@]}"; do
             done
             sleep 30
         done
-        echo "全部任务运行结束"
+        echo "Finish all tasks"
 
     elif [[ "$task" = "classification" ]]; then
-        echo "当前任务: $task"
-        data_names=("SelfRegulationSCP1" "SelfRegulationSCP2" "FaceDetection" "Handwriting" "Heartbeat")
+        data_names=("SelfRegulationSCP1" "SelfRegulationSCP2" "FaceDetection" " "Heartbeat")
         kranks=(6)
         learning_rate=0.001
 
@@ -97,7 +88,7 @@ for task in "${task_name[@]}"; do
                             "$inverse_model"
                         )
                     
-                        echo "执行模式: $inverse_model"
+                        echo "Mode: $inverse_model"
                         # ./scripts/classification/Bptt/BpttLSTM.sh "${args[@]}"
                         # ./scripts/classification/Sptt/SpttLSTM.sh "${args[@]}"
 
@@ -122,9 +113,9 @@ for task in "${task_name[@]}"; do
             done
             sleep 30
         done
-        echo "全部任务运行结束"
+        echo "Finish all tasks"
     elif [[ "$task" = "imputation" ]]; then
-        echo "当前任务: $task"
+        echo "Current task: $task"
         data_names=("ETTh2" "weather")
         kranks=(7)
         learning_rate=0.001
@@ -152,7 +143,7 @@ for task in "${task_name[@]}"; do
                             "$inverse_model"
                         )
                     
-                        echo "执行模式: $inverse_model"
+                        echo "Mode: $inverse_model"
                         # ./scripts/classification/Bptt/BpttLSTM.sh "${args[@]}"
                         # ./scripts/classification/Sptt/SpttLSTM.sh "${args[@]}"
 
@@ -177,10 +168,10 @@ for task in "${task_name[@]}"; do
             done
             sleep 30
         done
-        echo "全部任务运行结束"
+        echo "Finish all tasks"
 
     elif [[ "$task" = "anomaly_detection" ]]; then
-        echo "当前任务: $task"
+        echo "Current task: $task"
         data_names=("PSM" "SMAP")
         kranks=(10)
         learning_rate=0.0001
@@ -208,7 +199,7 @@ for task in "${task_name[@]}"; do
                             "$inverse_model"
                         )
                     
-                        echo "执行模式: $inverse_model"
+                        echo "Mode: $inverse_model"
                         # ./scripts/anomaly_detection/Bptt/BpttLSTM.sh "${args[@]}"
                         # ./scripts/anomaly_detection/Sptt/SpttLSTM.sh "${args[@]}"
 
@@ -233,9 +224,8 @@ for task in "${task_name[@]}"; do
             done
             sleep 30
         done
-        echo "全部任务运行结束"
-
+        echo "Finish all tasks"
     else
-        echo "未知任务: $task"
+        echo "Invalid task: $task"
     fi
 done

@@ -1,106 +1,55 @@
-# Time series forecasting with STITT
-**学习率调度器默认使用的余弦退火。**
-采用**M**模式，即多变量预测多变量。多对多预测问题比多对单预测问题更适合模型的性能比较，更能反应模型的性能差距。
+# Streaming Propagation Through Time for Training Recurrent Neural Networks
 
-1. 目前主要在纠结X S D三个矩阵乘积量级的估算方式，目前设计了三种估计方式。
-    - 随机采样估计
-    - Dropout估计
-    - Hutchinson估计
+This repository provides the implementation of the **SPTT-Window** variant of the **Streaming Propagation Through Time (SPTT)** framework proposed in our paper *"Streaming Propagation Through Time for Training Recurrent Neural Networks."*
 
-2. 目前是Dropout轨迹效果最好，但是也是需要调参在特定参数下,对应的数据是:
+---
 
-    | MSE |  Dropout_x | Dropout_d | iter |
-    | ---- | ---------- | --------- | ---- |
-    | 0.4976 | - | - | 5 |
-    | 0.4866 | - | - | 5 |
-    | 0.4903 | 0.5 | 0.7 | 5 |
-    | 0.4912 | 0.5 | 0.7 | 10 |
-    | 0.4867 | - | - | 5 |
-    | 0.5196 | 0.5 | 0.7 | 1 |
-    | 0.5270 | 0.65 | 0.7 | 5 |
-3. Hutchinson估计效果感觉更均衡,对应的数据是
+## 1. Code Structure and Naming Convention
 
-    | MSE | sample |
-    | ---- | ----------- |
-    | 0.4912 | 100 |
-    | 0.4905 | 200 |
-    | 0.4939 | 500 |
+The codebase contains two main implementations:
 
-    对于ETTh1数据集
-    | MSE | sample | time |
-    | ---- | ----------- | ---- |
-    | 0.1170 | 100 | 0.00315 |
+- Files named **`BPTT`** correspond to the **TBPTT (Truncated Backpropagation Through Time)** implementation.  
+- Files named **`SPTT`** correspond to the **SPTT-Window** implementation.
 
-4. 随机采样估计(随机抽取矩阵的某些行)不知道怎么说, 对应的数据是 0.5026 100
-    | MSE | sample |
-    | ---- | ----------- |
-    | 0.5026 | 100 |
-    | 0.4880 | 200 |
+Both implementations follow the same data loading and training interface, allowing a direct comparison under identical experimental settings.
 
-    对于ETTh1数据集
-    | MSE | sample | time |
-    | ---- | ----------- | ---- |
-    | 0.1334 | 100 | 0.00318 |
+---
 
-5. 综合考虑
-    - 随机采样可解释性不强，没有严格的理论保证，严重依赖采样尺寸，不同的采样尺寸差距可能很大，采样尺寸需要综合考虑X和D矩阵的行数。
-    - Dropout可以用Hinton的失活理论，但是理论计算量比Hutchinson估计大，且调参较多，需要设计X D矩阵的失活率，和迭代次数。而且感觉Dropout不稳定
-    - 目前看来Hutchnison估计效果最好，首先计算量小，其次有严格的数学基础，能提供无偏估计，并且有明确的方差界限和收敛保证。而且调参最少，不需要综合考虑X和D的尺寸，看起来更稳定。
-    - 看起来Hutchinson估计比随机采样更优秀，而且时间更短，确定用Hutchinson估计。
+## 2. Parameter Configuration
 
-6. 关于把标准正态归一化分解是否放到循环里面，已经经过实验验证，不能放到循环里面,放到循环里会出现下面三个问题
-    - 精度大幅度下降。
-    - loss可能后面随着训练的进行会出现nan，数值不稳定。
-    - 对角矩阵Sigma会出现0值，导致不能求逆矩阵，虽然可以加上微小常量以实现求逆，但是会出现loss为nan的情况。
+The number of **time blocks** used in the SPTT-Window framework can be adjusted via the `time_block_num` parameter.  
+Please modify this parameter in the corresponding task script to control how the input sequence is divided into temporal segments.
 
-    基于上述情况，将标准正态归一化分解放到循环外面，仅在计算最终梯度前进行一次，是非常优秀的策略，既能提高精度，训练又稳定，速度又快。放到最后有以下几个优点。
-    - 减少计算开销
-    - 保持中间计算的连续性，在迭代过程中，矩阵之间存在数学关系和依赖性，频繁缩放可能打断这种连续性，影响算法的收敛特性。
-    - 聚焦于最终梯度计算的稳定性，最终的目标是确保梯度计算不出现数值问题。
+---
 
-    6.1 循环内部归一化导致不稳定的原因。
-    
-    - 累积误差放大：每次迭代都进行归一化，会导致舍入误差在每次操作后被放大，随着迭代次数增加，这些微小误差会逐渐累积并扩大。
-    - 信息损失：频繁的归一化可能导致某些微小但重要的信号被压缩或丢失，尤其是当矩阵中包含不同尺度的值时。
-    - 梯度消失问题：反复的归一化操作可能导致某些方向上的梯度变得极小，使得Sigma矩阵中出现接近零的值，从而在求逆时出现数值不稳定。
-    - 训练过程中的干扰：在优化过程中，频繁的归一化会改变优化轨迹，干扰自然的梯度下降路径。
+## 3. Reference Framework
 
-    6.2 循环外部归一化合理性
+Our implementation is developed based on the [Time-Series-Library](https://github.com/thuml/Time-Series-Library). All other configurations (e.g., dataset structure, training procedure, environment setup) are consistent with those described in the main SPTT repository.
 
-    - 保留中间计算信息：整个迭代过程中保留了原始计算的数值特性，没有因为频繁归一化而丢失重要信息。
-    - 减少误差累积：只进行一次归一化，大大减少了舍入误差的累积效应。
-    - 数值稳定性提高：避免了多次归一化可能导致的极小值或极大值问题，Sigma矩阵不太可能出现接近零的元素。
-    - 计算效率更高：减少了循环内的计算操作，降低了每次迭代的计算开销
+---
 
-    6.3 从数学角度来看，循环内部频繁归一化相当于不断改变计算空间的基底，这会导致:
+## 4. Experimental Environment
 
-    - 条件数变化：频繁归一化会改变矩阵的条件数，可能使原本稳定的计算变得不稳定。
-    - 精度截断：浮点数运算中，每次归一化都会导致一定程度的精度截断，多次操作会放大这种影响。
-    - 优化路径干扰：频繁归一化会改变优化算法探索的参数空间几何特性，可能导致收敛到次优解或完全不收敛。
+All experiments were conducted on the following hardware and software configuration:
 
-7. Hutchinson估计真是一个优秀的方法，经过实验测试，即使在ETTh2和traffic数据集上，对于多变量预测多变量的问题，Hutchinson估计也比随机采样得到更好的效果，速度还快，收敛速度相当。
+- GPU: NVIDIA RTX 4090
+- CPU: Intel Core i7-14700KF
+- PyTorch: 2.1.0
+- Python: 3.8.19
+- Pytorch-cuda: 11.8
 
-    | estimation method | ETTh2 | traffic |
-    | ---- | ----------- | ----------- |
-    | random sampling | 0.9673 | 0.7899 |
-    | Hutchinson | 0.9412 | 0.7878 |
+We provided the yaml file of our experimental environment, and you can use conda to configure according environment:
+```bash
+conda env create -f sptt_main.yaml
+```
+---
 
-8. 使用的数据集配置如下:
+## 5. Visualization
 
-    | Dataset | ETTh1  ETTh2 | ETTm1  ETTm2 | Traffic | Electricity | Weather | Illness | ELC |
-    | ---- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- | ----------- |
-    | Channels | 7 | 7 | 862 | 321 | 21 | 7 | 8 |
-    | Sample Rate | 1 Hour | 15 Min | 1 Hour | 1 Hour | 10 Min | 1 Week | 1 Day |
-    | Timesteps | 17420 | 69680 | 17544 | 26304 | 52696 | 966 | 7589 |
-    | Batch Size | 64 | 128 | 64 | 128 | 128 | 32 | 64 |
-    | Seq Len | 384 | 768 | 480 | 576 | 672 | 96 | 192 |
-    | Pred Len | 96 | 480 | 192 | 288 | 384 | 96 | 96 |
+We provide one script to visualize the training dynamics of the models:
+- `utils/plot_time_block.py`: This script generates a comprehensive figure that shows the training dynamics of the models for different time blocks.
 
-9. 发现一些有意思的现象
-    - SPTT是基于主成分分析找到梯度优化的方向，并不断的修正，SPTT基于一种假设，即所有任务都是按照一种隐式函数进行规律变化，而SPTT就是不断试探逼近这个隐式函数。
-    - 结合上述SPTT是主成分分析，以及逼近这两点，SPTT对于大数据的处理特别好，特别是数据量越大或者说信息包含的越多，其效果越好，其逼近方向或者说梯度优化方向越准确。
-    - 那么这就可以解释下面的情况了，对于TSPTT我设置时间块=25的时候，在ETTh数据集上发现不如BPTT，回顾ETTh数据集发现序列长度设置为384， 那么表示每个时间块的时间长度为15，数据量太小了，这样会导致一个问题，因为SPTT是继承方向的，这意味着起始方向非常重要，如果起始方向不对，那么SPTT会沿着这个方向不断走下去，而初始的时间块信息太少，提供的方向可能离正确的方向偏离程度较大，导致SPTT效果不好。
-    - 对于SPTT因为是包含完整的序列，所以信息充足，所以不断修正方向，最终效果很好。
-    - 对于SPTT-1,因为采用的是完整序列的最后一个隐藏状态，最后一个时间步包含了最主要的信息，所以采用最后一个时间步也能得到比较好的效果。
-    - 对于SPTT-1我原始程序仍然采用时间块迭代for循环，此时可能不需要for循环了。如果数据量少可能一次看完比较好，数据量多，部分部分看，不断修正。这里如果只采用一次迭代，时间应该更快，我现在也在纠结论文要不要报道时间。
-    - 发现一个现象TSPTT我程序只是迭代一次，但是如果每个时间块也采用for循环，效果会有一定的提升，但提升不大。
+⚽️Note: We specifically monitor the loss curves for two representative tasks: long_term_forecast and classification. If you wish to monitor the training process for these specific tasks, you need to modify the main function interface in run.py.
+
+- For the long-term forecasting task, replace Exp = Exp_Long_Term_Forecast with `Exp = Exp_Long_Term_Forecast_Plot_Loss`.
+- For the classification task, replace Exp = Exp_Classification with `Exp = Exp_Classification_Plot_Loss`.

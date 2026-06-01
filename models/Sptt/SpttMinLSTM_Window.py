@@ -3,45 +3,28 @@ import torch.nn as nn
 import math
 from global_param import global_param
 import time
-from utils.GradientAccumulator_MinLSTM_Hybrid import GradientAccumulator_MinLSTM_Hybrid as GradientAccumulator
+from utils.GradientAccumulator_MinLSTM import GradientAccumulator_MinLSTM_Hybrid as GradientAccumulator
 from icecream import ic
 import numpy as np
 
 accumulator =  GradientAccumulator()
 
-def chordal_subspace_drift(Q_matrix_old: torch.Tensor, Q_matrix_new: torch.Tensor) -> torch.Tensor:
-    """
-    Q_matrix_old, Q_matrix_new: [d, k] with orthonormal columns.
-    Returns scalar drift (chordal distance): sqrt(k - ||Q_old^T Q_new||_F^2)
-    """
-    k = Q_matrix_old.shape[1]
-    M = Q_matrix_old.transpose(0, 1) @ Q_matrix_new
-    frob_sq = torch.sum(M ** 2)
-    drift_sq = torch.clamp(k - frob_sq, min=0.0)
-    return torch.sqrt(drift_sq)
+def QR_matrix(X_matrix, target_shape):
+    Q, R, diagonal_sign = qr_with_non_negative_diagonal(X_matrix)
+
+    return Q, R, diagonal_sign
 
 
 def qr_with_non_negative_diagonal(matrix):
     Q, R = torch.linalg.qr(matrix)
 
     diagonal_sign = torch.sign(torch.diag(R))
+    
     diagonal_sign[diagonal_sign == 0] = 1
 
     Q = Q * diagonal_sign.unsqueeze(0)
+    
     R = diagonal_sign.unsqueeze(1) * R
-
-    return Q, R, diagonal_sign
-
-
-def QR_matrix(X_matrix, target_shape):
-    Q, R, diagonal_sign = qr_with_non_negative_diagonal(X_matrix)
-
-    if Q.shape != target_shape:
-        assert Q.shape == target_shape, "not permit to change matrix shape"
-        result = torch.zeros(target_shape, device=X_matrix.device, dtype=X_matrix.dtype)
-        result[:min(Q.shape[0], target_shape[0]), :min(Q.shape[1], target_shape[1])] = \
-            Q[:min(Q.shape[0], target_shape[0]), :min(Q.shape[1], target_shape[1])]
-        return result, R, diagonal_sign
 
     return Q, R, diagonal_sign
 
@@ -94,17 +77,6 @@ class Model(nn.Module):
             raise ValueError("Task name not supported!")
 
     def forward(self, x, target=None, criterion=None, model_optim=None, inp=None, mask=None):
-        # final_hidden = self.lstm(x)
-        # fc_out = self.fc(final_hidden)
-
-        # if self.task_name == 'long_term_forecast':
-        #     y = fc_out.view(-1, self.output_size, self.feature_dim)
-        # elif self.task_name == 'classification':
-        #     y = fc_out
-        # elif self.task_name == 'imputation':
-        #     y = fc_out.view(-1, self.output_size, self.feature_dim)
-        # elif self.task_name == 'anomaly_detection':
-        #     y = fc_out.view(-1, self.output_size, self.feature_dim)
         result = self.lstm(x, target, criterion, model_optim, inp=inp, mask=mask)
         
         return result
@@ -161,9 +133,6 @@ class CustomMinLSTM(nn.Module):
         self.Delta_matrix_ih = torch.randn(3 * self.hidden_dim, self.krank).to(self.device) 
         
     def forward(self, x, targets=None, criterion=None, model_optim=None, inp=None, mask=None):
-        # accumulator.reset()
-        # global_param['flag'] = True
-        # global_param['compression_finished'] = False
         global_param['time_for_batch'] = 0.0
         
         if self.task_name == 'imputation':
@@ -175,7 +144,6 @@ class CustomMinLSTM(nn.Module):
         
         hx = torch.zeros(num_samples, self.hidden_dim).to(self.device)
         
-        # 划分时间块的索引
         indices = np.linspace(0, seq_len, self.time_block_num + 1, dtype=int)
         
         sum_loss = 0.0
@@ -187,18 +155,14 @@ class CustomMinLSTM(nn.Module):
                 chunk_start = indices[i]
                 chunk_end = indices[i + 1]
                 chunk_block += 1
-                # 判断是否是最后一个chunk.
                 if i == self.time_block_num - 1:
                     is_last_chunk = True
                 else:
                     is_last_chunk = False
                 
-                # 截断梯度流，但保持状态连续性
                 if chunk_start > 0:
-                    # 保留数值前向继续，但断开反向传播图,，这样确保每个时间块之间状态连续但梯度不连续。
                     hx.detach_()
                 
-                # 处理当前chunk的时间步
                 time_step = 0
                 
                 for i in range(chunk_start, chunk_end):
@@ -207,14 +171,10 @@ class CustomMinLSTM(nn.Module):
                     hx = MinLSTMCellFunction.apply(
                         inputs, hx, self.w_ih, self.b_ih, time_step, chunk_block
                     )
-                    
-                # global_param['compression_finished'] = True
                 
                 fc_out = self.fc(hx)
                 
-                # 计算损失(训练)
                 if self.task_name == "long_term_forecast":
-                    # print("fc_out", fc_out.shape)
                     y = fc_out.view(-1, self.output_size, self.feature_dim)
                     f_dim = -1 if self.config.features == 'MS' else 0
                     outputs = y[:, -self.config.pred_len:, f_dim:]
@@ -224,8 +184,6 @@ class CustomMinLSTM(nn.Module):
                     outputs = fc_out
                     loss = criterion(outputs, targets.long().squeeze(-1))
                 elif self.task_name == 'anomaly_detection':
-                    # print("fc_out", fc_out.shape)
-                    # print("进来了进来了！！！！！！！！！！！！！！！！！")
                     y = fc_out.view(-1, self.output_size_anomaly, self.feature_dim)
                     f_dim = -1 if self.config.features == 'MS' else 0
                     outputs = y[:, :, f_dim:]
@@ -240,26 +198,18 @@ class CustomMinLSTM(nn.Module):
                     loss = criterion(outputs[mask == 0], batch_x[mask == 0])
                 
                 sum_loss += loss.item()
-                
-                # print("loss is tensor?", type(loss))
-                # print("sum_loss is tensor?", type(sum_loss))
 
-                
                 if not is_last_chunk:
                     model_optim.zero_grad()
-                    # 如果不是最后一个chunk进行反向传播更新梯度和参数
                     loss.backward()
                     model_optim.step()
                     
-            # 如果是最后一个last_chunk，直接返回loss，在主程序反向传播，更新梯度和权重 
             if self.task_name == 'classification':
                 return outputs, loss, sum_loss
             else:
                 return loss, sum_loss
             
         elif model_optim is None and criterion is not None:
-            # 进行验证
-            # accumulator.reset()
             time_step = 0
             for i in range(x.size(1)):
                 time_step += 1
@@ -281,8 +231,6 @@ class CustomMinLSTM(nn.Module):
                 loss = criterion(pred, true)
             elif self.task_name == 'classification':
                 outputs = fc_out
-                # pred = outputs.detach().cpu()
-                # loss = criterion(pred, targets.long().squeeze().cpu())
             elif self.task_name == 'anomaly_detection':
                 y = fc_out.view(-1, self.output_size_anomaly, self.feature_dim)
                 f_dim = -1 if self.config.features == 'MS' else 0
@@ -310,11 +258,7 @@ class CustomMinLSTM(nn.Module):
                 return loss
             
         elif model_optim is None and criterion is None:
-            # 进行测试
             accumulator.reset()
-            # num_samples = x.size(0)
-            # seq_len = x.size(1)
-            
             time_step = 0
             
             for i in range(x.size(1)):
@@ -438,8 +382,6 @@ class MinLSTMCellFunction(torch.autograd.Function):
                 )
                 Sigma_ih = i_factor * Sigma_ih + Sigma_ih_product                                                                                                 
                 
-                Sigma_ih[Sigma_ih == 0] = 1
-                
                 Sigma_matrix_ih = torch.diag(Sigma_ih)
                 
                 inv_Sigma_matrix_ih = torch.inverse(Sigma_matrix_ih)
@@ -448,11 +390,6 @@ class MinLSTMCellFunction(torch.autograd.Function):
             
             end_calculate_gradients = time.time()
             global_param['time_for_batch'] = end_calculate_gradients - start_calculate_gradients
-            
-            if global_param.get('viz_spectrum_drift', False):
-                if 'sigma_list' not in global_param:
-                    global_param['sigma_list'] = []
-                global_param['sigma_list'].append(Sigma_ih.detach().cpu().numpy())
                 
             accumulator.save_sptt_parameter(
                 X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih

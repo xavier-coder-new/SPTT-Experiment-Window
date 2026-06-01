@@ -12,26 +12,19 @@ for data_name in "${data_names[@]}"; do
         for time_block_num in "${time_block_nums[@]}"; do
             for krank in "${kranks[@]}"; do
                 for learning_rate in "${learning_rates[@]}"; do
-                    echo "开始运行 $data_name, seed=$seed, time_block_num=$time_block_num, krank=$krank, learning_rate=$learning_rate"
-                    if [[ "$inverse_model" = "align" ]]; then
-                        echo "seed: $seed 可以执行 $data_name 数据集"
-                        ./scripts/imputation/Bptt/BpttLSTM.sh "$data_name" "$seed" "$time_block_num" "$learning_rate" "$inverse_model"
-                        ./scripts/imputation/Sptt/SpttLSTM.sh "$data_name" "$seed" "$time_block_num" "$krank" "$learning_rate" "$inverse_model"
+                    echo "Run $data_name, seed=$seed, time_block_num=$time_block_num, krank=$krank, learning_rate=$learning_rate"
+                    echo "seed: $seed ----- $data_name 数据集"
+                    ./scripts/imputation/Bptt/BpttLSTM.sh "$data_name" "$seed" "$time_block_num" "$learning_rate" "$inverse_model"
+                    ./scripts/imputation/Sptt/SpttLSTM.sh "$data_name" "$seed" "$time_block_num" "$krank" "$learning_rate" "$inverse_model"
 
-                        ./scripts/imputation/Sptt/SpttGRU.sh "$data_name" "$seed" "$time_block_num" "$krank" "$learning_rate" "$inverse_model"
-                        ./scripts/imputation/Bptt/BpttGRU.sh "$data_name" "$seed" "$time_block_num" "$learning_rate" "$inverse_model"
-                    else
-                        echo "执行模式: $inverse_model"
-                        ./scripts/imputation/Sptt_no_align/SpttLSTM.sh "$data_name" "$seed" "$time_block_num" "$krank" "$learning_rate" "$inverse_model"
-
-                        ./scripts/imputation/Sptt_no_align/SpttGRU.sh "$data_name" "$seed" "$time_block_num" "$krank" "$learning_rate" "$inverse_model"
-                    fi
+                    ./scripts/imputation/Sptt/SpttGRU.sh "$data_name" "$seed" "$time_block_num" "$krank" "$learning_rate" "$inverse_model"
+                    ./scripts/imputation/Bptt/BpttGRU.sh "$data_name" "$seed" "$time_block_num" "$learning_rate" "$inverse_model"
                     sleep 30
-                    echo "结束运行 $data_name, seed=$seed" 
+                    echo "Finish $data_name, seed=$seed" 
                 done
             done
         done
-        echo "运行结束 $data_name, seed=$seed time_block_num=$time_block_num" 
+        echo "Finish $data_name, seed=$seed time_block_num=$time_block_num" 
         sleep 30
     done
 done

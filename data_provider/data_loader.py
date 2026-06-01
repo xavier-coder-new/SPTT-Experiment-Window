@@ -47,26 +47,21 @@ class Dataset_ETT_hour(Dataset):
         self.__read_data__()
 
     def __read_data__(self):
-        # 初始化标准化器
         self.scaler = StandardScaler()
-        # 读取数据
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        # 定义数据分割边界
         border1s = [0, 12 * 30 * 24 - self.seq_len, 12 * 30 * 24 + 4 * 30 * 24 - self.seq_len]
         border2s = [12 * 30 * 24, 12 * 30 * 24 + 4 * 30 * 24, 12 * 30 * 24 + 8 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
-
-        # 根据特征类型选择数据
+        
         if self.features == 'M' or self.features == 'MS':
             cols_data = df_raw.columns[1:]
             df_data = df_raw[cols_data]
         elif self.features == 'S':
             df_data = df_raw[[self.target]]
 
-        # 根据是否标准化选择数据
         if self.scale:
             train_data = df_data[border1s[0]:border2s[0]]
             self.scaler.fit(train_data.values)
@@ -74,10 +69,9 @@ class Dataset_ETT_hour(Dataset):
         else:
             data = df_data.values
 
-        # 读取时间戳数据
         df_stamp = df_raw[['date']][border1:border2]
         df_stamp['date'] = pd.to_datetime(df_stamp.date)
-        # 根据时间编码方式选择时间特征
+
         if self.timeenc == 0:
             df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
             df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
@@ -88,7 +82,6 @@ class Dataset_ETT_hour(Dataset):
             data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
             data_stamp = data_stamp.transpose(1, 0) 
 
-        # 将数据赋值给类的属性
         self.data_x = data[border1:border2]
         self.data_y = data[border1:border2]
 
@@ -98,34 +91,22 @@ class Dataset_ETT_hour(Dataset):
         self.data_stamp = data_stamp
 
     def __getitem__(self, index):
-        # 获取序列的起始位置
         s_begin = index
-        # 获取序列的结束位置
         s_end = s_begin + self.seq_len
-        # 获取标签的起始位置
         r_begin = s_end - self.label_len
-        # 获取标签的结束位置
         r_end = r_begin + self.label_len + self.pred_len
 
-        # 获取序列数据
         seq_x = self.data_x[s_begin:s_end]
-        # 获取标签数据
         seq_y = self.data_y[r_begin:r_end]
-        # 获取序列时间戳
         seq_x_mark = self.data_stamp[s_begin:s_end]
-        # 获取标签时间戳
         seq_y_mark = self.data_stamp[r_begin:r_end]
 
-        # 返回序列数据、标签数据、序列时间戳、标签时间戳
         return seq_x, seq_y, seq_x_mark, seq_y_mark
 
     def __len__(self):
-        # 返回数据长度减去序列长度减去预测长度再加1
         return len(self.data_x) - self.seq_len - self.pred_len + 1
 
-    # 定义一个inverse_transform函数，用于对数据进行逆变换
     def inverse_transform(self, data):
-        # 调用scaler对象的inverse_transform方法，对数据进行逆变换
         return self.scaler.inverse_transform(data)
 
 

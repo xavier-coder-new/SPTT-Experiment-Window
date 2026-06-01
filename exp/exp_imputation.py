@@ -15,16 +15,10 @@ from global_param import global_param
 import csv
 import pandas as pd
 from icecream import ic
-from utils.visualization_spectrum_drift import plot_spectrum_drift
 
 warnings.filterwarnings('ignore')
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-"""
-输入: [batch_size, seq_len, num_features]
-
-"""
 
 log_root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'log')
 if not os.path.exists(log_root):
@@ -41,16 +35,12 @@ def setup_logger(model_name, dataset_name, seed, learning_rate, krank, time_bloc
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
     
-    
-    # 创建logger
     logger = logging.getLogger("imputation")
     logger.setLevel(logging.INFO)
     
-    # 清除之前的处理器，防止重复
     if logger.handlers:
         logger.handlers.clear()
     
-    # 创建文件处理器，并将日志文件保存到指定目录下
     timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
     file_handler = logging.FileHandler(
         os.path.join(
@@ -65,7 +55,6 @@ def setup_logger(model_name, dataset_name, seed, learning_rate, krank, time_bloc
     formatter = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(formatter)
     
-    # 配置自动刷新
     original_emit = file_handler.emit
     def new_emit(record):
         result = original_emit(record)
@@ -101,7 +90,6 @@ class Exp_Imputation(Exp_Basic):
     def train(self, setting):
         train_data, train_loader = self._get_data(flag='train')
         vali_data, vali_loader = self._get_data(flag='val')
-        # test_data, test_loader = self._get_data(flag='test')
 
         timestamp_loss_csv = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
         self.timestamp_loss_csv = timestamp_loss_csv        
@@ -184,35 +172,18 @@ class Exp_Imputation(Exp_Basic):
                     self.is_first_train = False
 
                 batch_x = batch_x.float().to(self.device)
-                # batch_x_mark = batch_x_mark.float().to(self.device)
 
-                # random mask
                 B, T, N = batch_x.shape
                 mask = torch.rand((B, T, N)).to(self.device)
                 mask[mask <= self.args.mask_rate] = 0  # masked
                 mask[mask > self.args.mask_rate] = 1  # remained
                 
-                # 使用masked_fill把mask中为0的位置置为0，相当于屏蔽这些输入值。
-                # inp是带有缺失值的输入数据。
                 inp = batch_x.masked_fill(mask == 0, 0)
 
                 loss, sum_loss = self.model(batch_x, None, criterion, model_optim, inp=inp, mask=mask)
-
-                # f_dim = -1 if self.args.features == 'MS' else 0
-                # outputs = outputs[:, :, f_dim:]
-
-                # add support for MS
-                # batch_x = batch_x[:, :, f_dim:]
-                # mask = mask[:, :, f_dim:]
                 
                 avg_loss = sum_loss / self.args.time_block_num
 
-                
-                # mask==0得到一个布尔张量，表示哪些位置被遮住了。
-                # outputs[mask == 0]: 模型对被遮住位置的预测。
-                # batch_x[mask == 0]: 被遮住位置的真实值。
-                # 只计算掩码为 0 的位置（被“遮蔽”的部分）的损失，用于训练模型学习填补这些被遮掉的值。
-                # loss = criterion(outputs[mask == 0], batch_x[mask == 0])
                 train_loss.append(avg_loss)
 
 
@@ -226,36 +197,6 @@ class Exp_Imputation(Exp_Basic):
 
                 loss.backward()
                 
-                if self.args.viz_spectrum_drift and self.args.model in {'BpttLSTM', 'BpttGRU'}:
-                    grad_w_hh = None
-                    for name, param in self.model.named_parameters():
-                        if 'w_hh' in name and param.grad is not None:
-                            grad_w_hh = param.grad.detach().float()
-                            break
-                    assert grad_w_hh is not None, "grad_w_hh is None"
-                    if grad_w_hh is not None:    
-                        if 'sigma_list' not in global_param:
-                            ic("model name: ", self.args.model, "allow to record spectrum drift")
-                            global_param['sigma_list'] = []
-                        _, Sigma, _ = torch.linalg.svd(grad_w_hh, full_matrices=False)
-                        truncated_sigma = Sigma[:self.args.krank]
-                        global_param['sigma_list'].append(truncated_sigma.cpu().numpy())
-                        
-                if self.args.viz_spectrum_drift and self.args.model in {'BpttMinLSTM', 'BpttMinGRU'}:
-                    grad_w_ih = None
-                    for name, param in self.model.named_parameters():
-                        if 'w_ih' in name and param.grad is not None:
-                            grad_w_ih = param.grad.detach().float()
-                            break
-                    assert grad_w_ih is not None, "grad_w_ih is None"
-                    if grad_w_ih is not None:    
-                        if 'sigma_list' not in global_param:
-                            ic("model name: ", self.args.model, "allow to record spectrum drift")
-                            global_param['sigma_list'] = []
-                        _, Sigma, _ = torch.linalg.svd(grad_w_ih, full_matrices=False)
-                        truncated_sigma = Sigma[:self.args.krank]
-                        global_param['sigma_list'].append(truncated_sigma.cpu().numpy())
-                
                 time_for_batch = global_param['time_for_batch']
                 if time_for_batch > max_time_batch:
                     max_time_batch = time_for_batch
@@ -266,28 +207,20 @@ class Exp_Imputation(Exp_Basic):
                 model_optim.step()
                 
                 logger.info(f"Epoch: {epoch + 1} Batch: {iter_count} Loss: {loss.item()} Time_batch: {time_for_batch:.5f}")
-
-            # logger.info(f"Epoch: {epoch + 1} cost time: {time.time() - epoch_time}")
             
             train_loss_data = pd.DataFrame({
                 'train_loss': train_loss
             })
 
-            # 追加写入csv文件
             if os.path.exists(train_loss_csv_file):
-                # a:表示以追加模式打开文件，如果文件存在，新的数据会被追加到文件末尾。
                 train_loss_data.to_csv(train_loss_csv_file, mode='a', header=False, index=False)
             else:
-                # w:表示以写入模式打开文件，如果文件不存在，则会创建文件，如果文件存在，则会覆盖原有文件。
                 train_loss_data.to_csv(train_loss_csv_file, mode='w', header=True, index=False)
 
-            # print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
-            # train_loss_per_iter.append(train_loss)
             
             vali_loss = self.vali(vali_data, vali_loader, criterion, vali_loss_csv_file)
-            # test_loss = self.vali(test_data, test_loader, criterion)
-            
+
             if self.args.lradj == 'type1':
                 adjust_learning_rate(model_optim, epoch + 1, self.args)
             else:
@@ -319,23 +252,10 @@ class Exp_Imputation(Exp_Basic):
                 vali_loss_df = pd.read_csv(vali_loss_csv_file)
                 visual_loss(vali_loss_df['vali_loss'].tolist(), 'Validation Loss', os.path.join(vali_loss_csv_dir, 'vali_loss.svg'))
                 
-                if self.args.viz_spectrum_drift:
-                    ic("visualize spectrum drift")
-                    viz_spectrum_drift_path = os.path.join('./viz_spectrum_drift', self.args.task_name, self.args.model, 
-                                                           self.args.data_name, self.args.inverse_model, str(self.args.seed), 
-                                                           f"Patience_{self.args.patience}_Epoch_{self.args.train_epochs}", 
-                                                           f"Time_block_{self.args.time_block_num}_Krank_{self.args.krank}", 
-                                                           str(timestamp_loss_csv))
-                    if not os.path.exists(viz_spectrum_drift_path):
-                        os.makedirs(viz_spectrum_drift_path)
-                    plot_spectrum_drift(viz_spectrum_drift_path, global_param['sigma_list'], train_steps, self.args.patience, self.args.model)
-                
                 avg_time_epoch /= epoch_count
                 logger.info(f"Early stopping Epoch: {epoch + 1} Steps: {train_steps} Average_time_epoch {avg_time_epoch:.5f} Min_time_epoch: {min_time_epoch:.5f} Max_time_epoch: {max_time_epoch:.5f}")
                 
                 break
-            
-            # adjust_learning_rate(model_optim, epoch + 1, self.args)
 
         best_model_path = path + '/' + 'checkpoint.pth'
         self.model.load_state_dict(torch.load(best_model_path))
@@ -349,16 +269,9 @@ class Exp_Imputation(Exp_Basic):
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
                 batch_x = batch_x.float().to(self.device)
-                # batch_x_mark = batch_x_mark.float().to(self.device)
 
-                # random mask
                 B, T, N = batch_x.shape
-                """
-                B = batch size
-                T = seq len
-                N = number of features
-                """
-                # 这生成的是均匀分布，因此mask_rate基本对应掩码的程度。
+
                 mask = torch.rand((B, T, N)).to(self.device)
                 mask[mask <= self.args.mask_rate] = 0  # masked
                 mask[mask > self.args.mask_rate] = 1  # remained
@@ -366,18 +279,6 @@ class Exp_Imputation(Exp_Basic):
 
                 loss = self.model(batch_x, None, criterion, None, inp, mask)
 
-                # f_dim = -1 if self.args.features == 'MS' else 0
-                # outputs = outputs[:, :, f_dim:]
-
-                # # add support for MS
-                # batch_x = batch_x[:, :, f_dim:]
-                # mask = mask[:, :, f_dim:]
-
-                # pred = outputs.detach().cpu()
-                # true = batch_x.detach().cpu()
-                # mask = mask.detach().cpu()
-
-                # loss = criterion(pred[mask == 0], true[mask == 0])
                 total_loss.append(loss.item())
                 
         vali_loss_data = pd.DataFrame({
@@ -397,7 +298,6 @@ class Exp_Imputation(Exp_Basic):
         test_data, test_loader = self._get_data(flag='test')
         if test:
             print('loading model')
-            # path = os.path.join(self.args.checkpoints, self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), setting)
             load_path = os.path.join(self.args.checkpoints, self.args.task_name, self.args.model, 
                                      self.args.data_name,str(self.args.seed), 
                                      self.args.inverse_model,str(self.args.mask_rate), setting)
@@ -416,9 +316,6 @@ class Exp_Imputation(Exp_Basic):
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
                 batch_x = batch_x.float().to(self.device)
-                # batch_x_mark = batch_x_mark.float().to(self.device)
-
-                # random mask
                 B, T, N = batch_x.shape
                 mask = torch.rand((B, T, N)).to(self.device)
                 mask[mask <= self.args.mask_rate] = 0  # masked
@@ -454,24 +351,8 @@ class Exp_Imputation(Exp_Basic):
         masks = np.concatenate(masks, 0)
         print('test shape:', preds.shape, trues.shape)
 
-        # result save
-        # folder_path = os.path.join('./results/', self.args.task_name, self.args.model, self.args.data_name, str(self.args.seed), str(self.args.mask_rate), str(timestamp))
-        # if not os.path.exists(folder_path):
-        #     os.makedirs(folder_path)
-
-
         mae, mse, rmse, mape, mspe = metric(preds[masks == 0], trues[masks == 0])
-        # print('mse:{}, mae:{}'.format(mse, mae))
-        # f = open("result_imputation.txt", 'a')
-        # f.write(setting + "  \n")
-        # f.write('mse:{}, mae:{}'.format(mse, mae))
-        # f.write('\n')
-        # f.write('\n')
-        # f.close()
         
         logger.info(f"Test | mse:{mse:.4f}  mae:{mae:.4f}  rmse:{rmse:.4f}  mape:{mape:.4f}  mspe:{mspe:.4f}")
 
-        # np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
-        # np.save(folder_path + 'pred.npy', preds)
-        # np.save(folder_path + 'true.npy', trues)
         return
