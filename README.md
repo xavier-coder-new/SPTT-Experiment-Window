@@ -183,12 +183,7 @@ This task-specific indexing differs from the within-call block indexing used in 
 **Spectral stabilization.** SPTT-Bounded additionally constrains the retained spectral coefficients:
 
 $$
-\widetilde{\sigma}_j
-=
-\operatorname{sign}(\sigma_j)
-\min\left\{
-10^4,\max(10^{-4},|\sigma_j|)
-\right\}.
+\widetilde{\sigma}_j = \operatorname{sign}(\sigma_j) \min\left\{10^4,\max(10^{-4},|\sigma_j|) \right\}.
 $$
 
 The remaining low-rank tracking and inheritance mechanisms are retained.
