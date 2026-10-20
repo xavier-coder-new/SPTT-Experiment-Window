@@ -4,23 +4,19 @@ from global_param import global_param
 class GradientAccumulator:
     def __init__(self):
         self.reset()
+        self.update_count = 0
     
     def reset(self):
         self.input = []
         self.hx = []
         self.delta = []
         self.length = 0
-        # print("执行了sptt的reset")
     
     def accumulate(self, input, hx, delta):
         self.input.append(input)
         self.hx.append(hx)
         self.delta.append(delta)
         self.length += len(input)
-        # # 当满足这个判断条件时，表示所有时间步都拼接完了。
-        # if self.length >= global_param['total_time_block_size']:
-        #     global_param['compression_finished'] = True
-        # global_param['compression_finished'] = True
         
     def get_concatenated_gradients(self):
         return torch.cat(self.input, dim=0), torch.cat(self.hx, dim=0), torch.cat(self.delta, dim=0)

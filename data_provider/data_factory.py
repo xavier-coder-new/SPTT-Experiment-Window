@@ -19,6 +19,38 @@ data_dict = {
 }
 
 def data_provider(args, flag):
+    if args.data == "DelayedCopy":
+        from data_provider.delayed_copy_dataset import SavedDelayedCopyDataset
+        import os
+
+        split = flag.lower()
+        assert split in ("train", "val", "test")
+
+        pt_path = os.path.join(
+            args.root_path,
+            f"{split}.pt"
+        )
+
+        data_set = SavedDelayedCopyDataset(pt_path)
+
+        data_loader = DataLoader(
+            data_set,
+            batch_size=args.batch_size,
+            shuffle=(split == "train"),
+            num_workers=args.num_workers,
+            drop_last=(split == "train"),
+        )
+
+        print(
+            f"DelayedCopy [{split}]",
+            f"samples={len(data_set)}",
+            f"seq_len={data_set.seq_len}",
+            f"feature_dim={data_set.feature_dim}",
+            f"num_classes={data_set.num_classes}"
+        )
+
+        return data_set, data_loader
+    
     Data = data_dict[args.data]
     timeenc = 0 if args.embed != 'timeF' else 1
 

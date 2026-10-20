@@ -13,6 +13,7 @@ from exp.exp_imputation import Exp_Imputation
 from exp.exp_anomaly_detection import Exp_Anomaly_Detection
 from exp.exp_classification_plot_loss import Exp_Classification_Plot_Loss
 from exp.exp_long_plot_loss import Exp_Long_Term_Forecast_Plot_Loss
+from exp.exp_delayed_copy import Exp_DelayedCopy
 from global_param import global_param
 
 if __name__  == "__main__":
@@ -92,6 +93,12 @@ if __name__  == "__main__":
     parser.add_argument('--record', action='store_true', help='record the trajectories of singular values')
     parser.add_argument('--inverse_model', type=str, default="stable", help='stable inverse or normal inverse')
     
+    # delayed copy dataset
+    parser.add_argument('--delayed_seq_len', type=int, default=400)
+    parser.add_argument('--delayed_feature_dim', type=int, default=16)
+    parser.add_argument('--delayed_num_classes', type=int, default=8)
+    parser.add_argument('--delayed_num_noises', type=int, default=0)
+    parser.add_argument('--use_chunk', type=int, choices=[0, 1], help='1: TBPTT, 0: Full BPTT')
     
     args = parser.parse_args()
     
@@ -133,6 +140,8 @@ if __name__  == "__main__":
         Exp = Exp_Imputation
     elif args.task_name == 'anomaly_detection':
         Exp = Exp_Anomaly_Detection
+    elif args.task_name == 'delayed_copy':
+        Exp = Exp_DelayedCopy
     else:
         raise NotImplementedError
     

@@ -96,7 +96,7 @@ python -u run.py \
   --gpu_type cuda \
   --hidden_dim 512 \
   --estimation_method None \
-  --num_class "$num_classes" \
+  --num_classes "$num_classes" \
   --des 'Exp'\
   --inverse_model $inverse_model
 
