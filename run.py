@@ -14,6 +14,7 @@ from exp.exp_anomaly_detection import Exp_Anomaly_Detection
 from exp.exp_classification_plot_loss import Exp_Classification_Plot_Loss
 from exp.exp_long_plot_loss import Exp_Long_Term_Forecast_Plot_Loss
 from exp.exp_delayed_copy import Exp_DelayedCopy
+from exp.exp_sequence_delay import Exp_Sequence_Delay
 from global_param import global_param
 
 if __name__  == "__main__":
@@ -141,7 +142,11 @@ if __name__  == "__main__":
     elif args.task_name == 'anomaly_detection':
         Exp = Exp_Anomaly_Detection
     elif args.task_name == 'delayed_copy':
+        print('***********Using Delayed Copy Experiment***********')
         Exp = Exp_DelayedCopy
+    elif args.task_name == 'sequence_delay':
+        print('***************Using Sequence Delay Experiment*******')
+        Exp = Exp_Sequence_Delay
     else:
         raise NotImplementedError
     

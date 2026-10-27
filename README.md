@@ -68,10 +68,9 @@ We provide four implementations for comparison:
 
 | Method | Implementation | Description |
 |---|---|---|
-| Full BPTT | `models/Bptt/FullBpttLSTM_Delay.py` | Standard BPTT without temporal truncation |
 | TBPTT | `models/Bptt/BpttLSTM_Delay.py` | Truncated BPTT with detached hidden states at block boundaries |
 | SPTT-Window | `models/Sptt/SpttLSTM_Delay.py` | SPTT with truncated error signals and inherited low-rank gradient states |
-| SPTT-Bounded | `models/Sptt/SpttLSTM_Delay_Bounded.py` | SPTT-Window with bounded spectral coefficients for numerical stability |
+| SPTT-Stability | `models/Sptt/SpttLSTM_Delay_Stability.py` | SPTT-Window with bounded spectral coefficients for numerical stability |
 
 All four implementations use the same LSTM architecture and delayed-copying task protocol.
 
@@ -163,7 +162,7 @@ The main experimental settings are summarized below:
 | 400 | 20 | 15 | 1.0 |
 | 600 | 30 | 15 | 1.0 |
 
-The original SPTT-Window implementation is evaluated on the shorter configurations, while the longer configurations are used to evaluate SPTT-Bounded.
+The `SpttLSTM_Delay` implementation is evaluated on the shorter configurations, while the longer configurations are used to evaluate `SpttLSTM_Delay_Stability`.
 
 For \(T=200,400,600\), the backward horizon is fixed at **20 time steps**, even though the total sequence length increases substantially.
 
@@ -180,7 +179,7 @@ $$
 
 This task-specific indexing differs from the within-call block indexing used in the main SPTT experiments.
 
-**Spectral stabilization.** SPTT-Bounded additionally constrains the retained spectral coefficients:
+**Spectral stabilization.** SPTT-Stability additionally constrains the retained spectral coefficients:
 
 $$
 \tilde{\sigma}_j = \mathrm{sign}(\sigma_j) \cdot \min\big(10^4, \max(10^{-4}, |\sigma_j|)\big)
@@ -201,3 +200,134 @@ All reported experiments use six independent model initialization seeds:
 The task is designed to evaluate whether recurrent models can learn delayed dependencies under different gradient propagation and low-rank tracking mechanisms.
 
 Importantly, successful delayed copying under truncation does not imply recovery of exact cross-boundary derivatives. Instead, the experiment evaluates the practical ability of SPTT-based optimization to learn long-range dependencies despite an explicitly limited backward horizon.
+
+
+## 7. Block-wise Supervision
+
+To further evaluate how SPTT utilizes gradient information across temporal blocks, we extend the delayed-copying task to a **block-wise supervision** setting.
+
+Unlike the strict endpoint-supervision setting in Experiment 6, where the classification loss is computed only at the final sequence endpoint, this setting computes a classification loss at the endpoint of each temporal block.
+
+🚴‍♀️Importantly, **the class cue is presented only at the first time step**. No additional class cues are introduced in subsequent blocks. The recurrent hidden and cell states remain continuous during forward propagation, while the computational graph is detached at each block boundary.
+
+All methods receive identical block-wise supervision, and model parameters are updated **only once per mini-batch**, after the complete sequence has been processed. Final test accuracy is evaluated exclusively at the last time step of the full sequence.
+
+We implement four variants to investigate how conventional TBPTT and SPTT-Window utilize gradients from successive temporal blocks.
+
+### 7.1 Implemented Methods
+
+#### TBPTT-LastOnly
+
+**Implementation:** `models/Bptt/TBptt_LastOnly.py`
+
+- Computes local truncated gradients at every temporal block.
+- Discards gradients from all preceding blocks without using them for parameter updates.
+- Retains only the gradient computed from the final block.
+- Performs a single parameter update after processing the complete sequence.
+
+This serves as a baseline in which intermediate block gradients are computed but not retained.
+
+#### SPTT-Window-LastOnly
+
+**Implementation:** `models/Sptt/Sptt_Window_LastOnly.py`
+
+- Computes local learning signals and recursively updates the inherited low-rank state at every block.
+- Discards the ordinary local gradients after incorporating their information into the low-rank representation.
+- Retains the updated low-rank factors across successive blocks.
+- Reconstructs the recurrent-weight gradient from the final inherited low-rank state.
+- Performs a single parameter update after processing the complete sequence.
+
+Unlike TBPTT-LastOnly, this variant preserves compressed historical learning information through the inherited low-rank state, even though ordinary gradients from preceding blocks are discarded.
+
+#### TBPTT-Accum
+
+**Implementation:** `models/Bptt/TBptt_Accum.py`
+
+- Computes a classification loss and its corresponding local truncated gradient at every block.
+- Accumulates the gradients from all temporal blocks.
+- Averages the accumulated local gradients.
+- Performs a single parameter update using the averaged gradient after processing the complete sequence.
+
+For $B$ temporal blocks, the resulting gradient is
+
+$$
+G_{\mathrm{TBPTT\text{-}Accum}}
+=
+\frac{1}{B}\sum_{b=1}^{B}G_b,
+$$
+
+where $G_b$ denotes the local truncated gradient computed at block $b$.
+
+This provides a stronger TBPTT baseline that directly utilizes gradient information from all supervised blocks.
+
+#### SPTT-Window-Accum
+
+**Implementation:** `models/Sptt/Sptt_Window_Accum.py`
+
+- Computes local learning signals at every temporal block.
+- Recursively updates the inherited low-rank state using the current block's information.
+- Reconstructs the recurrent-weight gradient from the updated low-rank state at each block.
+- Accumulates the reconstructed gradients across all blocks.
+- Performs a single parameter update using their average after processing the complete sequence.
+
+The resulting recurrent-weight gradient is
+
+$$
+\widetilde{G}_{\mathrm{SPTT\text{-}Accum}}
+=
+\frac{1}{B}\sum_{b=1}^{B}\mathcal{R}(S_b),
+$$
+
+where $S_b$ denotes the inherited low-rank state after processing block $b$, and $\mathcal{R}$ denotes low-rank gradient reconstruction.
+
+Unlike TBPTT-Accum, which directly averages local truncated gradients, SPTT-Window-Accum incorporates historical gradient information into its low-rank state before each reconstruction.
+
+### 7.2 Running the Experiments
+
+Experiment scripts are provided in:
+
+```text
+scripts/sequence_delay/
+```
+
+**Run all methods**
+
+To evaluate all four methods using the provided experimental configurations, execute the following command from the repository root:
+
+```bash
+bash ./scripts/sequence_delay/total_sequence.sh
+```
+
+**Run an individual method**
+
+Each method can also be evaluated independently using its corresponding shell script.
+
+For example, to run SPTT-Window-Accum:
+
+```bash
+bash ./scripts/sequence_delay/Sptt_Window_Accum.sh
+```
+
+To customize an experiment, modify the corresponding script's configuration parameters before execution.
+
+### 7.3 Experimental Configuration
+
+All experiments use the same dataset-generation protocol and random-seed configuration as **Experiment 6 (Strict Endpoint-Supervised Delayed Copying)**.
+
+The experiments are evaluated using six independent random seeds:
+
+```text
+2023, 2024, 2025, 2026, 2027, 2028
+```
+
+The evaluated sequence configurations are:
+
+| Sequence length | Number of blocks | Number of classes | Noise standard deviation |
+|---|---|---|---|
+| 50 | 5 | 8 | 0.0 |
+| 200 | 10 | 15 | 1.0 |
+| 600 | 30 | 15 | 1.0 |
+
+All four methods use the same data-generation settings, model configuration, and evaluation protocol within each experimental setting. Both SPTT variants use spectral-coefficient stabilization.
+
+**Key distinction from Experiment 6:** Experiment 6 uses strict endpoint supervision, whereas Experiment 7 introduces classification supervision at each block endpoint. Therefore, the block-wise supervision experiments provide complementary evidence about gradient utilization rather than a direct replacement for the strict endpoint-supervision comparison.

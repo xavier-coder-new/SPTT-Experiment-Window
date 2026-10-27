@@ -1,12 +1,9 @@
-import os
 import torch
-import sys
 import torch.nn as nn
 import math
 from global_param import global_param
 import time
 import numpy as np
-from icecream import ic
 
 class Model(nn.Module):
     def __init__(self, config):
@@ -17,8 +14,6 @@ class Model(nn.Module):
         self.hidden_dim = config.hidden_dim
         self.device = config.gpu_type
         self.krank = config.krank
-        self.task_name = config.task_name
-        self.output_size = config.num_classes
         self.feature_dim = config.feature_dim
         self.lstm = CustomLSTM(self.feature_dim, self.hidden_dim, self.krank, self.device, config)
 
@@ -37,10 +32,7 @@ class CustomLSTM(nn.Module):
         self.device = device
         self.use_chunk = bool(getattr(config, "use_chunk", 1))
         
-        self.task_name = config.task_name
-        self.output_size = config.pred_len
         self.feature_dim = config.feature_dim
-        self.output_size_anomaly = config.seq_len
         self.num_classes = config.num_classes
         self.config = config
         
@@ -60,7 +52,6 @@ class CustomLSTM(nn.Module):
     
     def forward(self, x, targets=None, criterion=None,
                 model_optim=None, inp=None, mask=None):
-
         global_param['time_for_batch'] = 0.0
 
         batch_size, seq_len, _ = x.shape
@@ -71,18 +62,26 @@ class CustomLSTM(nn.Module):
         is_training_forward = model_optim is not None
 
         if is_training_forward and self.use_chunk:
-            print("Using Chunk")
             indices = np.linspace(
                 0, seq_len,
                 self.time_block_num + 1,
                 dtype=int
             )
-
+            
+            final_loss = None
+            outputs = None
+            total_loss_value = 0.0
+            
             # TBPTT
             for chunk_idx in range(self.time_block_num):
                 chunk_start = indices[chunk_idx]
                 chunk_end = indices[chunk_idx + 1]
-
+                
+                if chunk_idx == self.time_block_num - 1:
+                    is_last_chunk = True
+                else:
+                    is_last_chunk = False
+                
                 if chunk_start > 0:
                     hx = hx.detach()
                     cx = cx.detach()
@@ -95,9 +94,22 @@ class CustomLSTM(nn.Module):
                         self.b_ih, self.b_hh,
                         j + 1, chunk_idx + 1
                     )
-
+                    
+                outputs = self.fc(hx)
+                chunk_loss = criterion(outputs, targets.long().squeeze(-1))
+                
+                scaled_loss = chunk_loss / self.time_block_num
+                
+                total_loss_value += scaled_loss.detach().item()
+                
+                if not is_last_chunk:
+                    scaled_loss.backward()
+                else:
+                    final_loss = scaled_loss
+                                
+            return outputs, final_loss, total_loss_value
+                
         else:
-            # print("Not Using Chunk")
             for j in range(seq_len):
                 hx, cx = LSTMCellFunction.apply(
                     x[:, j, :],
@@ -107,13 +119,9 @@ class CustomLSTM(nn.Module):
                     j + 1, None
                 )
 
-        outputs = self.fc(hx)
+            outputs = self.fc(hx)
 
-        if is_training_forward:
-            loss = criterion(outputs, targets.long().reshape(-1))
-            return outputs, loss
-
-        return outputs
+            return outputs
 
 
 class LSTMCellFunction(torch.autograd.Function):

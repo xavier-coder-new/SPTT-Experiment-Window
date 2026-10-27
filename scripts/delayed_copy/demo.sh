@@ -2,7 +2,7 @@
 
 export CUDA_VISIBLE_DEVICES=0
 
-model_name=SpttLong
+model_name=SpttStability
 data_name=DelayedCopy
 seed=2026
 time_block_num=20

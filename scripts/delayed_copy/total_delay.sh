@@ -2,9 +2,9 @@ export CUDA_VISIBLE_DEVICES=0
 seeds=(2026 2027 2028 2023 2024 2025)
 
 configs=(
-    "10 0.0 8"
-    "25 0.0 8"
-    "50 0.0 8"
+    # "10 0.0 8"
+    # "25 0.0 8"
+    # "50 0.0 8"
     "100 1.0 15"
     # "200 1.0 15"
     # "400 1.0 15"
@@ -36,8 +36,7 @@ for seed in "${seeds[@]}"; do
         echo "Running job: DelayedCopy-Seed--${seed}--Seq_Len--${seq_len}--Noise_Std--${noise_std}--Class_Num--${class_num}--Slide_Num--${time_block_num}"
         echo "--------------------------------------------------------------"
         
-        # ./scripts/delayed_copy/SpttLSTM_long.sh "$seed" "$time_block_num" "$seq_len" "$noise_std" "$class_num"
-        ./scripts/delayed_copy/FullBpttLSTM.sh "$seed" "$time_block_num" "$seq_len" "$noise_std" "$class_num"
+        ./scripts/delayed_copy/SpttLSTM_Stability.sh "$seed" "$time_block_num" "$seq_len" "$noise_std" "$class_num"
         ./scripts/delayed_copy/TBpttLSTM.sh "$seed" "$time_block_num" "$seq_len" "$noise_std" "$class_num"
         ./scripts/delayed_copy/SpttLSTM.sh "$seed" "$time_block_num" "$seq_len" "$noise_std" "$class_num"
     done

@@ -1,6 +1,4 @@
-import os
 import torch
-import sys
 import torch.nn as nn
 import math
 from global_param import global_param
@@ -25,7 +23,7 @@ def qr_with_non_negative_diagonal(matrix):
     diagonal_sign = torch.sign(torch.diag(R))
     
     diagonal_sign[diagonal_sign == 0] = 1
-    
+
     Q1 = Q * diagonal_sign.unsqueeze(0)
     
     R = diagonal_sign.unsqueeze(1) * R
@@ -59,6 +57,7 @@ class CustomLSTM(nn.Module):
         self.time_block_num = time_block_num
         self.device = device
         
+        self.task_name = config.task_name
         self.output_size = config.pred_len
         self.feature_dim = config.feature_dim
         self.config = config
@@ -70,7 +69,13 @@ class CustomLSTM(nn.Module):
 
         self.fc = nn.Linear(self.hidden_dim, config.num_classes)
         
-        accumulator.update_count = 0
+        self.fc.weight.register_hook(
+            lambda grad: grad / time_block_num
+        )
+
+        self.fc.bias.register_hook(
+            lambda grad: grad / time_block_num
+        )
 
         self.reset_parameters()
         self.init_stitt_parameters()
@@ -97,73 +102,82 @@ class CustomLSTM(nn.Module):
     def forward(self, x, targets=None, criterion=None, model_optim=None, inp=None, mask=None):
         global_param['time_for_batch'] = 0.0
 
-        num_samples = x.size(0)
-        seq_len = x.size(1)
+        batch_size, seq_len, _ = x.shape
         
-        hx = torch.zeros(num_samples, self.hidden_dim).to(self.device)
-        cx = torch.zeros(num_samples, self.hidden_dim).to(self.device)
+        # Initialize the hidden state and cell state
+        hx = torch.zeros(batch_size, self.hidden_dim).to(self.device)
+        cx = torch.zeros(batch_size, self.hidden_dim).to(self.device)
         
-        indices = np.linspace(0, seq_len, self.time_block_num + 1, dtype=int)
+        is_training_forward = model_optim is not None
         
-        if model_optim is not None:
-            chunk_block = 0
-            for i in range(self.time_block_num):
+        if is_training_forward:
+            indices = np.linspace(0, seq_len, self.time_block_num + 1, dtype=int)
+            
+            final_loss = None
+            outputs = None
+            total_loss_value = 0.0
+            
+            for chunk_idx in range(self.time_block_num):
                 accumulator.reset()
-                chunk_start = indices[i]
-                chunk_end = indices[i + 1]
-                chunk_block += 1
-                if i == self.time_block_num - 1:
+                chunk_start = indices[chunk_idx]
+                chunk_end = indices[chunk_idx + 1]
+                
+                if chunk_idx == self.time_block_num - 1:
                     is_last_chunk = True
                 else:
                     is_last_chunk = False
                 
                 if chunk_start > 0:
-                    hx.detach()
-                    cx.detach()
+                    hx = hx.detach()
+                    cx = cx.detach()
                 
                 time_step = 0
                 for j in range(chunk_start, chunk_end):
                     time_step += 1
-                    inputs = x[:, j, :]
                     hx, cx = LSTMCellFunction.apply(
-                        inputs, hx, cx, self.w_ih, self.w_hh, self.b_ih, self.b_hh, time_step, chunk_block
+                        x[:, j, :],
+                        hx, cx,
+                        self.w_ih, self.w_hh,
+                        self.b_ih, self.b_hh,
+                        time_step, chunk_idx + 1,
+                        self.time_block_num
                     )
+                    
+                outputs = self.fc(hx)
+                chunk_loss = criterion(outputs, targets.long().squeeze(-1))
                 
-            outputs = self.fc(hx)
-            last_loss = criterion(outputs, targets.long().squeeze(-1))
-
-            return outputs, last_loss
-                        
-        elif model_optim is None and criterion is not None:
-            time_step = 0
-            for i in range(x.size(1)):
-                time_step += 1
-                inputs = x[:, i, :]
-                hx, cx = LSTMCellFunction.apply(
-                    inputs, hx, cx, self.w_ih, self.w_hh, self.b_ih, self.b_hh, time_step
+                total_loss_value += (
+                    chunk_loss.detach().item() / self.time_block_num
                 )
+                
+                if not is_last_chunk:
+                    chunk_loss.backward()
+                else:
+                    final_loss = chunk_loss
 
-            fc_out = self.fc(hx)
-            
-            return fc_out
+            return outputs, final_loss, total_loss_value
 
-        elif model_optim is None and criterion is None:
+        else:
             accumulator.reset()
             time_step = 0
-            for i in range(x.size(1)):
+            for j in range(seq_len):
                 time_step += 1
-                inputs = x[:, i, :]
                 hx, cx = LSTMCellFunction.apply(
-                    inputs, hx, cx, self.w_ih, self.w_hh, self.b_ih, self.b_hh, time_step
+                    x[:, j, :],
+                    hx, cx,
+                    self.w_ih, self.w_hh,
+                    self.b_ih, self.b_hh,
+                    time_step
                 )
-
-            fc_out = self.fc(hx)
                 
-            return fc_out   
+            outputs = self.fc(hx)
+            
+            return outputs
+            
     
 class LSTMCellFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, inputs, hx, cx, w_ih, w_hh, b_ih, b_hh, time_step=None, chunk_block=None):
+    def forward(ctx, inputs, hx, cx, w_ih, w_hh, b_ih, b_hh, time_step=None, chunk_block=None, block_num=None):
         gates = (torch.mm(inputs, w_ih.t()) + b_ih + torch.mm(hx, w_hh.t()) + b_hh)
         ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
 
@@ -178,7 +192,8 @@ class LSTMCellFunction(torch.autograd.Function):
         ctx.save_for_backward(inputs, hx, cx, hy, cy, ingate, forgetgate, cellgate, outgate, w_ih, w_hh, b_ih, b_hh)
         ctx.time_step = time_step
         ctx.chunk_block = chunk_block
-
+        ctx.block_num = block_num
+        
         return hy, cy
     
     @staticmethod
@@ -186,6 +201,7 @@ class LSTMCellFunction(torch.autograd.Function):
         inputs, hx, cx, hy, cy, ingate, forgetgate, cellgate, outgate, w_ih, w_hh, b_ih, b_hh = ctx.saved_tensors
         time_step = ctx.time_step
         chunk_block = ctx.chunk_block
+        block_num = ctx.block_num
         
         grad_inputs = grad_hx = grad_cx = grad_w_ih = grad_w_hh = grad_b_ih = grad_b_hh = None
         
@@ -201,9 +217,9 @@ class LSTMCellFunction(torch.autograd.Function):
         grad_inputs = torch.mm(torch.cat((grad_ingate, grad_forgetgate, grad_cellgate, grad_outgate), 1), w_ih)
         grad_hx = torch.mm(torch.cat((grad_ingate, grad_forgetgate, grad_cellgate, grad_outgate), 1), w_hh)
         
-        grad_b_ih = torch.cat((grad_ingate, grad_forgetgate, grad_cellgate, grad_outgate), 1).sum(0)
-        grad_b_hh = torch.cat((grad_ingate, grad_forgetgate, grad_cellgate, grad_outgate), 1).sum(0)
-        
+        grad_b_ih = torch.cat((grad_ingate, grad_forgetgate, grad_cellgate, grad_outgate), 1).sum(0) / block_num
+        grad_b_hh = torch.cat((grad_ingate, grad_forgetgate, grad_cellgate, grad_outgate), 1).sum(0) / block_num
+                
         grad_cx = grad_cy * forgetgate
         
         if time_step == 1:
@@ -211,12 +227,10 @@ class LSTMCellFunction(torch.autograd.Function):
             grad_w_hh = torch.zeros_like(w_hh)
             
             X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih, X_matrix_hh, Sigma_hh, Sigma_matrix_hh, Delta_matrix_hh = accumulator.deliver_sptt_parameter()
-
             activation_input, activation_hx, delta = accumulator.get_concatenated_gradients()
             
             t = len(activation_input)
-            accumulator.update_count += 1
-            i = accumulator.update_count
+            i = chunk_block
 
             inv_Sigma_matrix_ih = torch.diag(1.0 / Sigma_ih)
             inv_Sigma_matrix_hh = torch.diag(1.0 / Sigma_hh)
@@ -228,10 +242,10 @@ class LSTMCellFunction(torch.autograd.Function):
                     
                 scale_factor_right_hh = delta @ Delta_matrix_hh / t
                 scale_factor_left_hh = activation_hx @ X_matrix_hh / t
-                
+                    
                 i_factor = i / (i + 1)
                 update_factor = 1 / (i + 1)
-
+                    
                 X_ih_update = activation_input.t() @ scale_factor_right_ih @ inv_Sigma_matrix_ih
                 X_matrix_ih = i_factor * X_matrix_ih + update_factor * X_ih_update
                     
@@ -255,7 +269,7 @@ class LSTMCellFunction(torch.autograd.Function):
                 
                 align_hh = Sigma_hh_signal_X * Sigma_hh_signal_Delta
                 Delta_matrix_hh = Delta_matrix_hh * align_hh.unsqueeze(0)
-
+                    
                 Sigma_ih_product = torch.sum(((delta @ Delta_matrix_ih) * (activation_input @ X_matrix_ih)) / ((i + 1) * t), dim=0)
                 Sigma_ih = i_factor * Sigma_ih + Sigma_ih_product      
                               
@@ -264,16 +278,16 @@ class LSTMCellFunction(torch.autograd.Function):
                 
                 Sigma_ih = safe_diag_inverse(Sigma_ih)
                 Sigma_hh = safe_diag_inverse(Sigma_hh)
-
+                    
                 Sigma_matrix_ih = torch.diag(Sigma_ih)
                 Sigma_matrix_hh = torch.diag(Sigma_hh)
-
+                    
                 inv_Sigma_matrix_ih = torch.inverse(Sigma_matrix_ih)
                 inv_Sigma_matrix_hh = torch.inverse(Sigma_matrix_hh)
             
-            grad_w_ih = (X_matrix_ih @ Sigma_matrix_ih @ Delta_matrix_ih.t()).t()
-            grad_w_hh = (X_matrix_hh @ Sigma_matrix_hh @ Delta_matrix_hh.t()).t()
-            
+            grad_w_ih = (X_matrix_ih @ Sigma_matrix_ih @ Delta_matrix_ih.t()).t() / block_num
+            grad_w_hh = (X_matrix_hh @ Sigma_matrix_hh @ Delta_matrix_hh.t()).t() / block_num
+                        
             end_calculate_gradients = time.time()
             time_backward = end_calculate_gradients - start_calculate_gradients
             
@@ -282,4 +296,4 @@ class LSTMCellFunction(torch.autograd.Function):
             accumulator.save_sptt_parameter(X_matrix_ih, Sigma_ih, Sigma_matrix_ih, Delta_matrix_ih, 
                                               X_matrix_hh, Sigma_hh, Sigma_matrix_hh, Delta_matrix_hh)
             
-        return grad_inputs, grad_hx, grad_cx, grad_w_ih, grad_w_hh, grad_b_ih, grad_b_hh, None, None
+        return grad_inputs, grad_hx, grad_cx, grad_w_ih, grad_w_hh, grad_b_ih, grad_b_hh, None, None, None

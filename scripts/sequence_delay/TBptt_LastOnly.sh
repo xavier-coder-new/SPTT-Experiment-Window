@@ -2,7 +2,7 @@
 
 export CUDA_VISIBLE_DEVICES=0
 
-model_name=FullBPTT
+model_name=TBptt_LastOnly
 data_name=DelayedCopy
 seed=$1
 time_block_num=$2
@@ -23,7 +23,7 @@ echo "root_path: $root_path"
 label=$feature_dim'_'$num_classes'_'$seq_len
 
 python -u run.py \
-  --task_name delayed_copy \
+  --task_name sequence_delay \
   --is_training 1 \
   --model_id "$data_name'_'$label" \
   --model $model_name \
@@ -49,4 +49,5 @@ python -u run.py \
   --num_classes "$num_classes" \
   --des 'Exp' \
   --inverse_model $inverse_model \
-  --use_chunk 0
+  --use_chunk 1
+
