@@ -1,6 +1,6 @@
 import os
 import torch
-from models.Bptt import BpttLSTM, BpttGRU, BpttMinLSTM, BpttMinGRU, BpttSRU, BpttLSTM_Delay, TBptt_Accum, TBptt_LastOnly
+from models.Bptt import BpttLSTM, BpttGRU, BpttMinLSTM, BpttMinGRU, BpttSRU, BpttLSTM_Delay, TBptt_Accum, TBptt_LastOnly, FullBpttLSTM_Delay
 from models.Sptt import (SpttGRU_Window, SpttLSTM_Window, 
                          SpttMinGRU_Window, SpttMinLSTM_Window, 
                          SpttSRU_Window, SpttLSTM_Delay, SpttLSTM_Delay_Stablity,
@@ -27,6 +27,7 @@ class Exp_Basic(object):
             'TBptt_LastOnly': TBptt_LastOnly,
             'Sptt_Window_Accum': Sptt_Window_Accum,
             'Sptt_Window_LastOnly': Sptt_Window_LastOnly,
+            'FullBPTT': FullBpttLSTM_Delay,
         }
 
         self.device = self._acquire_device()

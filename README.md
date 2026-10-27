@@ -201,9 +201,19 @@ The task is designed to evaluate whether recurrent models can learn delayed depe
 
 Importantly, successful delayed copying under truncation does not imply recovery of exact cross-boundary derivatives. Instead, the experiment evaluates the practical ability of SPTT-based optimization to learn long-range dependencies despite an explicitly limited backward horizon.
 
-### 6.6 Running TBPTT with High Optimizer Momentum
 
-To reproduce the **TBPTT-HighMomentum (TBPTT-HM)** baseline, the optimizer configuration must be modified manually.
+### 6.6 Running BPTT and TBPTT with High Optimizer Momentum
+
+To reproduce the **BPTT-HighMomentum (BPTT-HM)** and **TBPTT-HighMomentum (TBPTT-HM)** baselines, the RAdam optimizer configuration must be modified manually.
+
+Both variants use an increased first-moment coefficient, while retaining their respective backpropagation strategies:
+
+- **BPTT-HM:** Uses full backpropagation through the entire sequence, without detaching the computational graph at temporal block boundaries.
+- **TBPTT-HM:** Uses truncated backpropagation, detaching the computational graph at each temporal block boundary.
+
+The two variants differ only in their backpropagation strategies, not in their high-momentum optimizer settings.
+
+#### Step 1: Modify the optimizer configuration
 
 Open the following file:
 
@@ -228,20 +238,36 @@ model_optim = optim.RAdam(
 )
 ```
 
-This changes the RAdam first-moment coefficient from the default $\beta_1=0.9$ to $\beta_1=0.95$, while keeping the second-moment coefficient at $\beta_2=0.999$.
+This increases the RAdam first-moment coefficient from the default $\beta_1=0.9$ to $\beta_1=0.95$, while keeping the second-moment coefficient at $\beta_2=0.999$.
 
-After modifying the optimizer, run the TBPTT experiment from the repository root:
+#### Step 2: Run the corresponding experiment
+
+**BPTT-HighMomentum (BPTT-HM)**
+
+Run the full BPTT experiment using its corresponding execution script, with the high-momentum optimizer configuration enabled.
+
+```bash
+bash ./scripts/delayed_copy/FullBPTT.sh
+```
+
+**TBPTT-HighMomentum (TBPTT-HM)**
+
+Run the truncated BPTT experiment from the repository root:
 
 ```bash
 bash ./scripts/delayed_copy/TBpttLSTM.sh
 ```
 
-**Important notes:**
+Ensure that the selected script uses the intended backpropagation implementation. In particular, the TBPTT-HM experiment must detach the computational graph at temporal block boundaries, whereas BPTT-HM must retain the full computational graph.
 
-- This modification is required only for reproducing the TBPTT-HighMomentum baseline.
-- The model architecture, dataset configuration, and training protocol remain unchanged.
-- To reproduce the standard TBPTT baseline, restore the original RAdam optimizer configuration.
-- 🥎 Since the optimizer is configured in the shared experiment file, remember to restore the default settings before running other experiments that should not use high momentum.
+#### Important Notes
+
+- The high-momentum setting is identical for BPTT-HM and TBPTT-HM: `betas=(0.95, 0.999)`.
+- Only the optimizer momentum configuration is changed relative to each method's standard baseline.
+- Model architectures, dataset configurations, random seeds, and training budgets remain unchanged.
+- Changing the optimizer coefficients alone does not convert full BPTT into TBPTT.
+- To reproduce standard BPTT or TBPTT, restore the default RAdam optimizer configuration.
+- 🥎 **The optimizer is configured in a shared experiment file.** Remember to restore the default settings before running other experiments that should not use high momentum.
 
 
 ## 7. Block-wise Supervision
