@@ -201,6 +201,48 @@ The task is designed to evaluate whether recurrent models can learn delayed depe
 
 Importantly, successful delayed copying under truncation does not imply recovery of exact cross-boundary derivatives. Instead, the experiment evaluates the practical ability of SPTT-based optimization to learn long-range dependencies despite an explicitly limited backward horizon.
 
+### 6.6 Running TBPTT with High Optimizer Momentum
+
+To reproduce the **TBPTT-HighMomentum (TBPTT-HM)** baseline, the optimizer configuration must be modified manually.
+
+Open the following file:
+
+`exp/exp_delayed_copy.py`
+
+Locate the default RAdam optimizer initialization:
+
+```python
+model_optim = optim.RAdam(
+    self.model.parameters(),
+    lr=self.args.learning_rate
+)
+```
+
+Replace it with:
+
+```python
+model_optim = optim.RAdam(
+    self.model.parameters(),
+    lr=self.args.learning_rate,
+    betas=(0.95, 0.999)
+)
+```
+
+This changes the RAdam first-moment coefficient from the default $\beta_1=0.9$ to $\beta_1=0.95$, while keeping the second-moment coefficient at $\beta_2=0.999$.
+
+After modifying the optimizer, run the TBPTT experiment from the repository root:
+
+```bash
+bash ./scripts/delayed_copy/TBpttLSTM.sh
+```
+
+**Important notes:**
+
+- This modification is required only for reproducing the TBPTT-HighMomentum baseline.
+- The model architecture, dataset configuration, and training protocol remain unchanged.
+- To reproduce the standard TBPTT baseline, restore the original RAdam optimizer configuration.
+- 🥎 Since the optimizer is configured in the shared experiment file, remember to restore the default settings before running other experiments that should not use high momentum.
+
 
 ## 7. Block-wise Supervision
 
