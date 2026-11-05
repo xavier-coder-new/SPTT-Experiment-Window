@@ -64,15 +64,17 @@ Further experimental details and results are provided in the Supplementary Infor
 
 ### 6.1 Model Implementations
 
-We provide four implementations for comparison:
+We provide three model implementations:
 
 | Method | Implementation | Description |
 |---|---|---|
-| TBPTT | `models/Bptt/BpttLSTM_Delay.py` | Truncated BPTT with detached hidden states at block boundaries |
+| TBPTT | `models/Bptt/BpttLSTM_Delay.py` | Truncated backpropagation with detached hidden states at block boundaries |
 | SPTT-Window | `models/Sptt/SpttLSTM_Delay.py` | SPTT with truncated error signals and inherited low-rank gradient states |
 | SPTT-Stability | `models/Sptt/SpttLSTM_Delay_Stability.py` | SPTT-Window with bounded spectral coefficients for numerical stability |
 
-All four implementations use the same LSTM architecture and delayed-copying task protocol.
+TBPTT-HighMomentum (TBPTT-HM) uses the same TBPTT implementation with an increased RAdam first-moment coefficient, as described in Section 6.6.
+
+All methods use the same LSTM architecture and delayed-copying task protocol.
 
 For both TBPTT and SPTT-Window, hidden and cell states remain continuous during forward propagation, while their computational graphs are detached at block boundaries.
 
@@ -162,9 +164,9 @@ The main experimental settings are summarized below:
 | 400 | 20 | 15 | 1.0 |
 | 600 | 30 | 15 | 1.0 |
 
-The `SpttLSTM_Delay` implementation is evaluated on the shorter configurations, while the longer configurations are used to evaluate `SpttLSTM_Delay_Stability`.
+For the strict endpoint-supervised experiments, `SpttLSTM_Delay` is used for shorter sequences ($T=10,25,50$), while `SpttLSTM_Delay_Stability` is used for longer sequences ($T=100,200,400,600$).
 
-For \(T=200,400,600\), the backward horizon is fixed at **20 time steps**, even though the total sequence length increases substantially.
+For $T=100,200,400,600$, the backward horizon is fixed at **20 time steps**, even though the total sequence length increases substantially.
 
 ### 6.4 SPTT-Specific Settings
 
@@ -202,16 +204,13 @@ The task is designed to evaluate whether recurrent models can learn delayed depe
 Importantly, successful delayed copying under truncation does not imply recovery of exact cross-boundary derivatives. Instead, the experiment evaluates the practical ability of SPTT-based optimization to learn long-range dependencies despite an explicitly limited backward horizon.
 
 
-### 6.6 Running BPTT and TBPTT with High Optimizer Momentum
+### 6.6 Running TBPTT with High Optimizer Momentum
 
-To reproduce the **BPTT-HighMomentum (BPTT-HM)** and **TBPTT-HighMomentum (TBPTT-HM)** baselines, the RAdam optimizer configuration must be modified manually.
+To reproduce the **TBPTT-HighMomentum (TBPTT-HM)** baseline, we increase the first-moment coefficient of the RAdam optimizer while keeping the original TBPTT implementation and all other training settings unchanged.
 
-Both variants use an increased first-moment coefficient, while retaining their respective backpropagation strategies:
+TBPTT-HM uses the same truncated backpropagation procedure as standard TBPTT, with hidden and cell states detached at every temporal block boundary.
 
-- **BPTT-HM:** Uses full backpropagation through the entire sequence, without detaching the computational graph at temporal block boundaries.
-- **TBPTT-HM:** Uses truncated backpropagation, detaching the computational graph at each temporal block boundary.
-
-The two variants differ only in their backpropagation strategies, not in their high-momentum optimizer settings.
+This experiment examines whether increasing conventional optimizer momentum alone can reproduce the performance improvements observed with SPTT-Window.
 
 #### Step 1: Modify the optimizer configuration
 
@@ -240,34 +239,42 @@ model_optim = optim.RAdam(
 
 This increases the RAdam first-moment coefficient from the default $\beta_1=0.9$ to $\beta_1=0.95$, while keeping the second-moment coefficient at $\beta_2=0.999$.
 
-#### Step 2: Run the corresponding experiment
+All other optimizer parameters and training settings remain unchanged.
 
-**BPTT-HighMomentum (BPTT-HM)**
+#### Step 2: Run TBPTT-HighMomentum
 
-Run the full BPTT experiment using its corresponding execution script, with the high-momentum optimizer configuration enabled.
-
-```bash
-bash ./scripts/delayed_copy/FullBPTT.sh
-```
-
-**TBPTT-HighMomentum (TBPTT-HM)**
-
-Run the truncated BPTT experiment from the repository root:
+From the repository root, execute:
 
 ```bash
 bash ./scripts/delayed_copy/TBpttLSTM.sh
 ```
 
-Ensure that the selected script uses the intended backpropagation implementation. In particular, the TBPTT-HM experiment must detach the computational graph at temporal block boundaries, whereas BPTT-HM must retain the full computational graph.
+Ensure that the experiment uses the TBPTT implementation, which detaches the computational graph at each temporal block boundary.
+
+With the modified optimizer configuration, this script reproduces the TBPTT-HM baseline.
 
 #### Important Notes
 
-- The high-momentum setting is identical for BPTT-HM and TBPTT-HM: `betas=(0.95, 0.999)`.
-- Only the optimizer momentum configuration is changed relative to each method's standard baseline.
-- Model architectures, dataset configurations, random seeds, and training budgets remain unchanged.
-- Changing the optimizer coefficients alone does not convert full BPTT into TBPTT.
-- To reproduce standard BPTT or TBPTT, restore the default RAdam optimizer configuration.
-- 🥎 **The optimizer is configured in a shared experiment file.** Remember to restore the default settings before running other experiments that should not use high momentum.
+- **Optimizer:** RAdam with `betas=(0.95, 0.999)`.
+- **Backpropagation:** Truncated at every temporal block boundary, identical to standard TBPTT.
+- **Architecture:** The same LSTM architecture as the standard TBPTT baseline.
+- **Dataset:** The same delayed-copying datasets and experimental configurations.
+- **Random seeds:** `2023, 2024, 2025, 2026, 2027, 2028`.
+- **Training budget:** Unchanged from standard TBPTT.
+- **Checkpoint selection:** Based on validation loss.
+
+Only the optimizer momentum configuration differs between TBPTT and TBPTT-HM.
+
+**Important:** The optimizer is configured in a shared experiment file. After running TBPTT-HM, restore the default RAdam optimizer configuration before executing experiments that do not use high momentum.
+
+The default configuration is:
+
+```python
+model_optim = optim.RAdam(
+    self.model.parameters(),
+    lr=self.args.learning_rate
+)
+```
 
 
 ## 7. Block-wise Supervision
