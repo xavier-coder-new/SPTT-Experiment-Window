@@ -117,8 +117,8 @@ class CustomLSTM(nn.Module):
                     is_last_chunk = False
                 
                 if chunk_start > 0:
-                    hx.detach()
-                    cx.detach()
+                    hx.detach()_
+                    cx.detach()_
                 
                 time_step = 0
                 for j in range(chunk_start, chunk_end):
